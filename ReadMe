@@ -1,0 +1,265 @@
+
+How will component get events ?
+
+As part of bootstrapper , the google play framework is registered with listener and actively listening to any install request  and its corresponding outcome events
+
+All events for a module will flow to state store , DFComponentStateStore
+
+Component/ App layer  will consume events from
+
+##################################################### Complete flow ######################################################################
+
+Deep Link       --->  Component Activity --->  Headless Component Install Compose function ---> N
+App Navigation  --->  Component Activity --->  Headless Component Install Compose function ---> N
+
+Headless Component Install Compose function ---> N
+Headless Component Install Compose function ---> state store --->
+       MVI pattern if module not installed then same as get data . trigger module install -->
+           Headless Component Install Compose function gets raw events from listener compute and update the state store
+
+           Events will flow using event sourcing pattern to event execution context which will compute the state and update the state store
+
+           The execution context will read config and execute before and after interceptors
+
+           The interceptors can be any behaviors
+
+             a) Service loader
+             b) Post install analytics
+
+
+----- Additional  Notes ----------
+ Deep link with data , native navigation with data
+
+
+What is MVI?
+MVI is an architectural pattern that organizes an application into three core components:
+
+Model: Represents the application’s state, serving as the single source of truth for what the user interface (UI) should display.
+View: The UI layer that renders the state and captures user interactions (called intents).
+Intent: User actions or events (e.g., button clicks) that trigger changes to the state.
+In MVI, data flows in one direction:
+
+The View sends intents to the ViewModel.
+The ViewModel processes these intents and updates the state.
+The View observes the updated state and re-renders the UI.
+This unidirectional flow makes the application predictable, testable, and easier to maintain.
+
+The Role of the State Store
+The state store is a centralized component that holds the application’s state. It acts as the single source of truth for all state data, ensuring consistency across the app. Here’s what it does:
+
+Centralized State Management: It stores raw state data, such as user preferences, network statuses, or feature installation progress.
+Persistence: It can save state across app restarts using tools like databases or SharedPreferences.
+Reactive Updates: It often uses reactive streams (e.g., StateFlow in Kotlin or LiveData) to notify observers (like the ViewModel) when the state changes.
+For example, imagine an app managing dynamic feature installations. The state store might track whether a feature is "Not Installed," "Installing," or "Installed," providing a reliable, app-wide state reference.
+
+
+The Role of the ViewModel
+The ViewModel serves as a bridge between the View and the state store. It processes intents, interacts with the state store, and prepares state data specifically for the UI. Here’s its purpose:
+
+UI-Specific State: It transforms raw state from the state store into a format the View can easily use, such as combining data or filtering it for a specific screen.
+Business Logic: It handles the logic for processing intents, like validating user input or initiating actions (e.g., starting a feature installation).
+Lifecycle Awareness: In frameworks like Android, the ViewModel survives configuration changes (e.g., screen rotations), ensuring state consistency without burdening the View.
+For instance, in the feature installation example, the ViewModel might take the state store’s "Installing" status and combine it with a loading indicator for the UI.
+
+How the State Store and ViewModel Work Together
+The state store and ViewModel collaborate to manage state and update the UI in a structured way. Here’s how they interact:
+
+Initial Setup: The ViewModel observes the state store to get the latest state data (e.g., a feature’s installation status).
+Intent Processing: When the View sends an intent (e.g., "Load Feature"):
+The ViewModel checks the state store’s current state.
+It performs actions based on that state (e.g., starts an installation if the feature isn’t installed).
+It updates its own UI state (e.g., sets it to "Loading").
+State Changes: As the state store updates (e.g., the feature’s status changes to "Installed"), the ViewModel reacts and adjusts its UI state (e.g., to "Success").
+UI Rendering: The View observes the ViewModel’s state and updates the UI accordingly (e.g., shows the installed feature).
+This ensures a clear flow: Intent → ViewModel → State Store → ViewModel → View.
+
+
+
+--- Service Loader -------
+
+Your framework, part of the core dependencies, allows dynamic feature modules to register themselves after installation. You want to use the service locator pattern to load these modules and access their services, with DFComponentConfig defining configurations, including a list of interceptors. These interceptors can perform various tasks, such as initializing the service locator, logging analytics, or enforcing login requirements. The solution involves:
+
+A Global Service Locator: A centralized mechanism in the core app to register and retrieve services provided by dynamic features.
+Feature Registration: A way for dynamic features to register their components and services after installation, using a registrar pattern.
+Interceptors: Pre-install and post-install interceptors in DFComponentConfig to manage the feature lifecycle, with one interceptor initializing the service locator.
+Installation Workflow: A process to install features on-demand, run interceptors, and integrate with the service locator.
+
+To make this discoverable via ServiceLoader, add a file in the :plants module:
+
+File: src/main/resources/META-INF/services/com.kuru.featureflow.component.register.FeatureRegistrar
+Content: com.kuru.plants.PlantsFeatureRegistrar
+
+Step 4: Implement Feature Module Registration
+Each dynamic feature module implements FeatureRegistrar. For example, in the :plants module:
+
+----- Interceptors  ----------
+
+Step 3: Configure Dynamic Features with Interceptors
+The DFComponentConfig data class already supports a list of DFComponentInterceptor objects, where each interceptor has a preInstall flag and a task: () -> Boolean. Use this to define pre-install checks (e.g., network availability) and post-install tasks (e.g., service locator initialization).
+
+Here’s how a feature’s configuration might look in the core app:
+
+kotlin
+
+Copy
+package com.kuru.featureflow.component.register
+
+val plantsConfig = DFComponentConfig(
+    route = "plants",
+    listOfDFComponentInterceptor = listOf(
+        // Pre-install interceptor: Check network
+        DFComponentInterceptor(preInstall = true) {
+            val isNetworkAvailable = checkNetworkConnectivity() // Hypothetical function
+            if (!isNetworkAvailable) println("No network for plants feature")
+            isNetworkAvailable
+        },
+        // Post-install interceptor: Initialize service locator
+        DFComponentInterceptor(preInstall = false) {
+            try {
+                val registrar = findRegistrarForRoute("plants")
+                registrar?.initialize()
+                true
+            } catch (e: Exception) {
+                println("Failed to initialize plants feature: $e")
+                false
+            }
+        }
+    )
+)
+
+fun findRegistrarForRoute(route: String): FeatureRegistrar? {
+    return ServiceLoader.load(FeatureRegistrar::class.java)
+        .find { it.getDefinition().route == route }
+}
+Pre-Install Interceptors: Run before installation to validate conditions.
+Post-Install Interceptors: Run after installation to trigger feature initialization.
+
+----------
+
+
+/**
+     * How It Works
+     * 1) Defining the Service Provider Interface (SPI)
+     *   The framework defines an interface, say DFComponentEntry, which acts as the contract that all dynamic feature modules must implement.
+     *   This is the "entry point" interface that the framework expects.
+     * 2) Dynamic Feature Module Implementation
+     *    Each dynamic feature module provides its own implementation of DFComponentEntry.
+     *    For example, a "plants" module might have a class called PlantEntry that implements DFComponentEntry.
+     * 3) Service Configuration with META-INF
+     *     Each dynamic feature module includes a special configuration file located at:
+     *     META-INF/services/com.kuru.featureflow.component.register.DFComponentEntry
+     *     The file’s name is the fully qualified name of the SPI interface (DFComponentEntry in this case).
+     *     Inside this file, the module lists the fully qualified name of its implementation class, e.g.:
+     *     com.kuru.featureflow.plant.PlantEntry
+     *  This file acts as a bridge, telling the ServiceLoader which class to load for the given interface.
+     *  4) Loading with ServiceLoader
+     *      When the framework executes:
+     *     val serviceLoader = ServiceLoader.load(DFComponentEntry::class.java, context.classLoader)
+     *     The ServiceLoader scans the entire classpath (via the provided context.classLoader) for all files
+     *     named META-INF/services/com.kuru.featureflow.component.register.DFComponentEntry.
+     *     It reads the class names listed in these files (e.g., com.kuru.featureflow.plant.PlantEntry).
+     *     Using reflection, it instantiates these classes, creating instances of the DFComponentEntry implementations.
+     *  5) Dynamic Feature Modules and Classpath
+     *     When a dynamic feature module is installed (e.g., via Play Feature Delivery or another mechanism),
+     *     its classes and resources—including the META-INF/services/ directory—become part of the application’s classpath.
+     *     The context.classLoader ensures that the ServiceLoader can access this updated classpath, allowing it to find
+     *     and load the entry point classes from the newly installed modules.
+     *  6) Initializing the Modules
+     *     After loading, the framework can iterate over the ServiceLoader and call methods on the loaded implementations, like:
+     *     serviceLoader.forEach { entry -> entry.initialize() }
+     *     This allows each module to register itself or perform any necessary setup with the framework.
+     *
+     *     What’s Happening in Point 3?
+     * Point 3 refers to setting up a configuration file in the "plants" dynamic feature module that tells the ServiceLoader where to find the PlantEntry class. This file lives in a specific directory (META-INF/services/) and follows a standard Java convention for service discovery. Let’s dive into how this works.
+     *
+     * The Setup: Interface and Implementation
+     * First, let’s establish the pieces involved:
+     *
+     * The Interface (SPI - Service Provider Interface)
+     * You have an interface defined in your framework:
+     * kotlin
+     *
+     * Copy
+     * package com.kuru.featureflow.component.register
+     *
+     * interface DFComponentEntry {
+     *     fun initialize()
+     * }
+     * This is the contract that all dynamic feature modules must follow.
+     * The Implementation in the "plants" Module
+     * In your "plants" module, you’ve created a class that implements this interface:
+     * kotlin
+     *
+     * Copy
+     * package com.kuru.featureflow.plant
+     *
+     * object PlantEntry : DFComponentEntry {
+     *     override fun initialize() {
+     *         // Initialization logic for the plants module
+     *     }
+     * }
+     * PlantEntry is the entry point for the "plants" module, but the framework doesn’t know about it yet. We need a way to connect the two.
+     * The Role of META-INF/services/
+     * To bridge the gap between the interface (DFComponentEntry) and its implementation (PlantEntry), you use a configuration file in the META-INF/services/ directory. Here’s how you set it up:
+     *
+     * Directory and File Creation
+     * Inside the "plants" module, you create the following structure:
+     * text
+     *
+     * Copy
+     * plants-module/
+     * ├── src/
+     * │   └── com/kuru/featureflow/plant/
+     * │       └── PlantEntry.kt
+     * ├── META-INF/
+     * │   └── services/
+     * │       └── com.kuru.featureflow.component.register.DFComponentEntry
+     * The file is named exactly after the fully qualified name of the interface: com.kuru.featureflow.component.register.DFComponentEntry.
+     * This naming convention is critical—it’s how ServiceLoader knows which interface this file corresponds to.
+     * File Contents
+     * Inside the com.kuru.featureflow.component.register.DFComponentEntry file, you write one line:
+     * text
+     *
+     * Copy
+     * com.kuru.featureflow.plant.PlantEntry
+     * This is the fully qualified name of the implementation class (PlantEntry).
+     * The file acts like a pointer, saying: “Hey, if you’re looking for implementations of DFComponentEntry, here’s one: PlantEntry.”
+     * How ServiceLoader Uses This to Find PlantEntry
+     * Now, let’s connect this to the ServiceLoader. In your framework, you likely have code like this:
+     *
+     * kotlin
+     *
+     * Copy
+     * val serviceLoader = ServiceLoader.load(DFComponentEntry::class.java, context.classLoader)
+     * Here’s what happens when this line runs:
+     *
+     * Scanning the Classpath
+     * The ServiceLoader searches the entire classpath (which includes the "plants" module once it’s installed) for any files located at META-INF/services/com.kuru.featureflow.component.register.DFComponentEntry.
+     * The context.classLoader ensures it can see all loaded modules, including dynamic ones like "plants."
+     * Reading the File
+     * When it finds the file META-INF/services/com.kuru.featureflow.component.register.DFComponentEntry in the "plants" module, it opens it and reads the contents: com.kuru.featureflow.plant.PlantEntry.
+     * Loading the Class
+     * Using reflection, the ServiceLoader loads the PlantEntry class based on the name it found (com.kuru.featureflow.plant.PlantEntry).
+     * Since PlantEntry is a Kotlin object (a singleton), it retrieves the instance of PlantEntry.
+     * If it were a regular class, it would create a new instance (assuming it has a no-arg constructor).
+     * Providing the Instance
+     * The ServiceLoader then makes PlantEntry available to your code as an implementation of DFComponentEntry. You can iterate over all found implementations like this:
+     * kotlin
+     *
+     * Copy
+     * serviceLoader.forEach { entry ->
+     *     entry.initialize() // Calls PlantEntry.initialize()
+     * }
+     */
+
+Here’s the sequence breakdown:
+
+Application Running: Your base application module is already running. It has access to its own ApplicationContext.
+Module Installed: The dynamic feature module ("plants") gets downloaded and installed. Its classes, including PlantEntry and the META-INF/services/ file, are now part of the application's classpath.
+ServiceLoader Called (in Base Module): Your framework code, likely running in the base module (e.g., inside DFComponentViewModel.runServiceLoaderInitialization), calls ServiceLoader.load(). Crucially, the Context passed to ServiceLoader.load(..., context.classLoader) is typically the readily available ApplicationContext from the base module.
+Instance Created (by ServiceLoader): ServiceLoader scans the classpath (using the provided classloader which now includes the dynamic module), finds the META-INF/services/ file, reads the class name (com.kuru.featureflow.plant.PlantEntry), and uses reflection to load and instantiate PlantEntry. At this point, the PlantEntry object exists.
+initialize() Called (in Base Module): The framework code then iterates through the instances provided by ServiceLoader and calls entry.initialize().
+
+./gradlew :app:publishToMavenLocal
+
+ls ~/.m2/repository/com/kuru/featureflow/2.0.0/
