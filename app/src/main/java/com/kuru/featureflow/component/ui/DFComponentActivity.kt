@@ -188,7 +188,7 @@ class DFComponentActivity : ComponentActivity() {
                         _featureAwaitingConfirmation = null
                     }
 
-                    if (uiState.DFInstallationState is DFInstallationState.Installed) {
+                    if (uiState.featureInstallationState is DFInstallationState.Installed) {
                         val featureName = uiState.feature
                         Log.d(TAG, "Feature $featureName reached Installed state.")
                         // TODO: Trigger navigation to the actual feature screen here.

@@ -51,7 +51,7 @@ fun DFComponentScreen(viewModel: DFComponentViewModel) {
                 Spacer(modifier = Modifier.height(8.dp))
                 // Displaying the raw InstallationState might not be user-friendly
                 // Adapt this based on what the user needs to see
-                Text("Status: ${state.DFInstallationState::class.simpleName}")
+                Text("Status: ${state.featureInstallationState::class.simpleName}")
                 // TODO: Add navigation or display the actual feature UI here
             }
             is DFComponentState.Error -> {

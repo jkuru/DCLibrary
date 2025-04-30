@@ -77,7 +77,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.kotlin.stdlib)
     // DataStore
-    implementation(libs.androidx.datastore.preferences)
+    api(libs.androidx.datastore.preferences)
 
     // Core Android dependencies
     implementation(libs.androidx.core.ktx)
@@ -146,7 +146,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.kuru"
                 artifactId = "featureflow"
-                version = "4.0.0"
+                version = "5.1.0"
             }
         }
     }

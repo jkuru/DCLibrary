@@ -40,7 +40,7 @@ sealed class DFComponentState {
     data class RequiresConfirmation(val feature: String) : DFComponentState() // No change here
     data class Success(
         val feature: String,
-        val DFInstallationState: DFInstallationState // Usually Installed
+        val featureInstallationState: DFInstallationState // Usually Installed
     ) : DFComponentState()
 }
 
@@ -140,7 +140,12 @@ class DFComponentViewModel @Inject constructor(
                 if (installer.isComponentInstalled(feature)) {
                     Log.d(TAG, "Feature $feature already installed. Running post-install steps.")
                     // Ensure registration happened (idempotent) - Pass context
-                    runServiceLoaderInitialization(feature, context) // Pass context
+                    try {
+                        runServiceLoaderInitialization(feature, context) // Pass context
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to run ServiceLoader for feature $feature", e)
+                        throw e
+                    }
                     // Run post-install interceptors (idempotent)
                     runPostInstallInterceptors(feature) // Needs to run within a coroutine if using withContext
                     // --- Fetch and set screen content for already installed feature ---
