@@ -34,6 +34,9 @@ class DFComponentActivity : ComponentActivity() {
     @Inject
     lateinit var splitInstallManager: SplitInstallManager
 
+    @Inject
+    lateinit var componentUriRouteParser : DFComponentUriRouteParser
+
     private lateinit var confirmationResultLauncher: ActivityResultLauncher<IntentSenderRequest>
 
     // Keep track of the feature name associated with a *currently active* confirmation request
@@ -257,7 +260,7 @@ class DFComponentActivity : ComponentActivity() {
     }
 
     private fun processRoute(uri: String) {
-        val dynamicRoute = DFComponentUriRouteParser.extractRoute(uri)
+        val dynamicRoute = componentUriRouteParser.extractRoute(uri)
 
         if (dynamicRoute.status == "success" && dynamicRoute.route.isNotEmpty()) {
             Log.d(

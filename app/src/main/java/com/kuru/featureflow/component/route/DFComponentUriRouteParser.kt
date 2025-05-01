@@ -2,20 +2,29 @@ package com.kuru.featureflow.component.route
 
 import android.net.Uri
 import android.util.Log
+import com.kuru.featureflow.component.register.DFComponentRegistryManager
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Utility class for parsing URIs into DFComponentRoute objects.
  * Provides a static method to extract route information from a given URI.
  */
-object DFComponentUriRouteParser { // Make it an object for static-like access without companion
+@Singleton
+class DFComponentUriRouteParser @Inject constructor() {
 
-    private const val TAG = "DFUriParser"
-    private const val BASE_PATH_PREFIX = "/chase/df/"
-    private const val ROUTE_SEGMENT = "route"
-    private const val NAVIGATION_SEGMENT = "navigation"
-    private const val KEY_SEGMENT = "key"
-    private const val STATUS_SUCCESS = "success"
-    private const val STATUS_FAILED = "failed"
+    init {
+        Log.e(TAG, "DFComponentUriRouteParser Init")
+    }
+    companion object {
+        private const val  TAG = "DFUriParser"
+        private const val BASE_PATH_PREFIX = "/chase/df/"
+        private const val ROUTE_SEGMENT = "route"
+        private const val NAVIGATION_SEGMENT = "navigation"
+        private const val KEY_SEGMENT = "key"
+        private const val STATUS_SUCCESS = "success"
+        private const val STATUS_FAILED = "failed"
+    }
 
     /**
      * Extracts the DFComponentRoute from the provided raw URI string.
@@ -25,7 +34,7 @@ object DFComponentUriRouteParser { // Make it an object for static-like access w
      */
     fun extractRoute(rawURI: String?): DFComponentRoute {
         if (rawURI.isNullOrBlank()) {
-            Log.w(TAG, "Input URI is null or blank.")
+            Log.e(TAG, "Input URI is null or blank.")
             return createFailedRoute("Input URI is null or blank")
         }
 
@@ -38,14 +47,14 @@ object DFComponentUriRouteParser { // Make it an object for static-like access w
 
         val path = uri.path
         if (path == null || !path.startsWith(BASE_PATH_PREFIX)) {
-            Log.w(TAG, "URI path is null or does not start with $BASE_PATH_PREFIX. Path: $path")
+            Log.e(TAG, "URI path is null or does not start with $BASE_PATH_PREFIX. Path: $path")
             return createFailedRoute("Invalid path prefix")
         }
 
         // Use safe access for path segments
         val pathSegments = uri.pathSegments ?: emptyList()
         if (pathSegments.isEmpty()) {
-            Log.w(TAG, "URI path has no segments after prefix. Path: $path")
+            Log.e(TAG, "URI path has no segments after prefix. Path: $path")
             // Decide if this is an error or a default case
             return createFailedRoute("No path segments found")
         }
@@ -60,7 +69,7 @@ object DFComponentUriRouteParser { // Make it an object for static-like access w
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Error parsing query parameters for URI: $rawURI", e)
+            Log.e(TAG, "Error parsing query parameters for URI: $rawURI", e)
             // Continue without query params or mark as failed? Decide based on requirements.
         }
 
@@ -113,14 +122,14 @@ object DFComponentUriRouteParser { // Make it an object for static-like access w
                 )
             }
             else -> {
-                Log.w(TAG, "URI path structure not recognized after prefix. Path: $path")
+                Log.e(TAG, "URI path structure not recognized after prefix. Path: $path")
                 createFailedRoute("Unrecognized path structure")
             }
         }
     }
 
     private fun createFailedRoute(logMessage: String): DFComponentRoute {
-        Log.w(TAG, "Route extraction failed: $logMessage")
+        Log.e(TAG, "Route extraction failed: $logMessage")
         return DFComponentRoute(
             path = "",
             route = "",

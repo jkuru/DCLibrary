@@ -2,6 +2,7 @@ package com.kuru.featureflow.component.googleplay
 
 import android.content.Context
 import android.util.Log
+import com.google.android.play.core.splitcompat.SplitCompat
 import com.google.android.play.core.splitinstall.SplitInstallManager
 import com.google.android.play.core.splitinstall.SplitInstallRequest
 import com.google.android.play.core.splitinstall.SplitInstallSessionState
@@ -26,6 +27,10 @@ class DFComponentInstallerManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) : DFComponentInstaller {
 
+    init {
+        Log.e(TAG, "DFComponentInstaller Init")
+        SplitCompat.install(context)
+    }
     companion object {
         private const val TAG = "DFComponentInstallerMgr"
     }
@@ -34,13 +39,13 @@ class DFComponentInstallerManager @Inject constructor(
 
     override fun isComponentInstalled(componentName: String): Boolean {
         val installed = splitInstallManager.installedModules.contains(componentName)
-        Log.d(TAG, "isComponentInstalled($componentName): $installed")
+        Log.e(TAG, "isComponentInstalled($componentName): $installed")
         return installed
     }
 
     override fun installComponent(componentName: String): Flow<DFInstallProgress> { // Changed return type
         if (isComponentInstalled(componentName)) {
-            Log.i(TAG, "Install requested for already installed component: $componentName")
+            Log.e(TAG, "Install requested for already installed component: $componentName")
             // Wrap the final state in InstallProgress
             return flowOf(DFInstallProgress(DFInstallationState.Installed))
         }
@@ -58,13 +63,13 @@ class DFComponentInstallerManager @Inject constructor(
                     val installProgress = mapSessionStateToInstallProgress(state, componentName) // Use new helper
                     val newState = installProgress.frameworkState // Extract framework state for logging/logic
 
-                    Log.d(TAG, "Listener received state for $componentName (Session $currentSessionId): $newState (Raw Status: ${state.status()})")
+                    Log.e(TAG, "Listener received state for $componentName (Session $currentSessionId): $newState (Raw Status: ${state.status()})")
 
                     // Try sending the InstallProgress object
                     val success = trySend(installProgress).isSuccess
 
                     if (isTerminalState(newState) || !success) {
-                        Log.i(
+                        Log.e(
                             TAG,
                             "Terminal state ($newState) or channel closed ($success) for $componentName (Session $currentSessionId). Cleaning up listener."
                         )
@@ -74,20 +79,20 @@ class DFComponentInstallerManager @Inject constructor(
                         }
                     }
                 } else {
-                    Log.v(TAG, "Listener ignored state update for unrelated session ${state.sessionId()}")
+                    Log.e(TAG, "Listener ignored state update for unrelated session ${state.sessionId()}")
                 }
             }
 
             try {
-                Log.i(TAG, "Requesting install for $componentName...")
+                Log.e(TAG, "Requesting install for $componentName...")
                 currentSessionId = splitInstallManager.startInstall(request).await()
-                Log.i(TAG, "Install request initiated for $componentName. Session ID: $currentSessionId")
+                Log.e(TAG, "Install request initiated for $componentName. Session ID: $currentSessionId")
 
                 val existingListener = activeListeners.putIfAbsent(currentSessionId, listener)
 
                 if (existingListener == null) {
                     splitInstallManager.registerListener(listener)
-                    Log.i(TAG, "Registered listener for $componentName (Session $currentSessionId).")
+                    Log.e(TAG, "Registered listener for $componentName (Session $currentSessionId).")
 
                     // Emit an initial state based on current session status or Pending
                     val currentSessionState = splitInstallManager.getSessionState(currentSessionId).await()
@@ -96,7 +101,7 @@ class DFComponentInstallerManager @Inject constructor(
                     } else {
                         DFInstallProgress(DFInstallationState.Pending) // Fallback initial state
                     }
-                    Log.d(TAG, "Emitting initial state for $componentName (Session $currentSessionId): ${initialProgress.frameworkState}")
+                    Log.e(TAG, "Emitting initial state for $componentName (Session $currentSessionId): ${initialProgress.frameworkState}")
                     trySend(initialProgress)
                 } else {
                     Log.w(TAG, "Listener already active for session $currentSessionId. New listener not registered.")
@@ -115,14 +120,14 @@ class DFComponentInstallerManager @Inject constructor(
             }
 
             awaitClose {
-                Log.i(TAG, "Flow closing (awaitClose) for $componentName (Session $currentSessionId). Ensuring listener cleanup.")
+                Log.e(TAG, "Flow closing (awaitClose) for $componentName (Session $currentSessionId). Ensuring listener cleanup.")
                 cleanupListener(currentSessionId)
             }
         }
     }
 
     override fun retryComponentInstall(componentName: String): Flow<DFInstallProgress> { // Changed return type
-        Log.i(TAG, "Retry requested for $componentName. Starting installation flow.")
+        Log.e(TAG, "Retry requested for $componentName. Starting installation flow.")
         return installComponent(componentName)
     }
 
@@ -131,7 +136,7 @@ class DFComponentInstallerManager @Inject constructor(
         if (listenerToRemove != null) {
             try {
                 splitInstallManager.unregisterListener(listenerToRemove)
-                Log.i(TAG, "Listener successfully unregistered for session $sessionId")
+                Log.e(TAG, "Listener successfully unregistered for session $sessionId")
             } catch (e: Exception) {
                 Log.e(TAG, "Error unregistering listener for session $sessionId", e)
             }

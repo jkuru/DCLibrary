@@ -1,4 +1,3 @@
-
 package com.kuru.featureflow.di
 
 import android.content.Context
@@ -12,6 +11,8 @@ import com.kuru.featureflow.component.googleplay.DFComponentInstallerManager
 import com.kuru.featureflow.component.register.ComponentRegistryData
 import com.kuru.featureflow.component.register.DFComponentRegistry
 import com.kuru.featureflow.component.register.DFComponentRegistryManager
+import com.kuru.featureflow.component.route.DFComponentRoute
+import com.kuru.featureflow.component.route.DFComponentUriRouteParser
 import com.kuru.featureflow.component.state.DFComponentStateStore
 import com.kuru.featureflow.component.state.DFComponentStateStoreImpl
 import dagger.Binds
@@ -52,13 +53,15 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    fun provideApplicationScope(): CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @Provides
     @Singleton
     fun provideServiceMap(): MutableMap<Class<*>, Any> {
         return mutableMapOf()
     }
+
 }
 
 @Module
@@ -82,4 +85,5 @@ abstract class FrameworkBindingsModule {
     abstract fun bindDFComponentRegistry(
         impl: DFComponentRegistryManager
     ): DFComponentRegistry
+
 }

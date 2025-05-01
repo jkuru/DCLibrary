@@ -1,6 +1,7 @@
 package com.kuru.featureflow.component.state
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -35,6 +36,12 @@ class DFComponentStateStoreImpl @Inject constructor(
     private val externalScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) // Use Main.immediate for synchronous-like updates
 ) : DFComponentStateStore {
 
+    init {
+        Log.e(TAG, "DFComponentStateStoreImpl Init")
+    }
+    companion object {
+        private const val TAG = "DFComponentStateStoreImpl"
+    }
     // --- Preference Keys ---
     private object PreferencesKeys {
         val LAST_ATTEMPTED_FEATURE_URI = stringPreferencesKey("last_attempted_feature_uri")

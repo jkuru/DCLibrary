@@ -3,6 +3,7 @@ package com.kuru.featureflow.component.register
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
+import com.kuru.featureflow.component.googleplay.DFComponentInstallerManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,6 +13,9 @@ class DFComponentRegistryManager @Inject constructor(
     private val services: MutableMap<Class<*>, Any>
 ) : DFComponentRegistry {
 
+    init {
+        Log.e(TAG, "DFComponentRegistryManager Init")
+    }
     companion object {
         private const val TAG = "DFRegistryManager"
     }
