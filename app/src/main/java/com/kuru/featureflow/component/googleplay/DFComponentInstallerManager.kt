@@ -12,6 +12,7 @@ import com.kuru.featureflow.component.state.DFErrorCode
 import com.kuru.featureflow.component.state.DFInstallProgress
 import com.kuru.featureflow.component.state.DFInstallationState
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -59,11 +60,13 @@ class DFComponentInstallerManager @Inject constructor(
             }.onFailure { e ->
                 Log.e(TAG, "Failed to check session states for $componentName", e)
             }
+            Log.e(TAG, "Fallback to installedModules  session check fails $componentName so setting module installed to true")
             return true // Fallback to installedModules if session check fails
         }
         return false
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     override suspend fun installComponent(componentName: String): Flow<DFInstallProgress> { // Changed return type
         if (isComponentInstalled(componentName)) {
             Log.e(TAG, "Install requested for already installed component: $componentName")
@@ -81,7 +84,7 @@ class DFComponentInstallerManager @Inject constructor(
             val listener = SplitInstallStateUpdatedListener { state -> // state is SplitInstallSessionState
                 if (state.sessionId() == currentSessionId) {
                     // Map the Play Core state to our framework state AND create InstallProgress
-                    val installProgress = mapSessionStateToInstallProgress(state, componentName) // Use new helper
+                    val installProgress = mapSessionStateToInstallProgress(state, componentName)
                     val newState = installProgress.frameworkState // Extract framework state for logging/logic
 
                     Log.e(TAG, "Listener received state for $componentName (Session $currentSessionId): $newState (Raw Status: ${state.status()})")
@@ -90,10 +93,7 @@ class DFComponentInstallerManager @Inject constructor(
                     val success = trySend(installProgress).isSuccess
 
                     if (isTerminalState(newState) || !success) {
-                        Log.e(
-                            TAG,
-                            "Terminal state ($newState) or channel closed ($success) for $componentName (Session $currentSessionId). Cleaning up listener."
-                        )
+                        Log.e(TAG, "Terminal state ($newState) or channel closed ($success) for $componentName (Session $currentSessionId). Cleaning up listener.")
                         cleanupListener(currentSessionId)
                         if (!isClosedForSend) {
                             close()
@@ -118,7 +118,7 @@ class DFComponentInstallerManager @Inject constructor(
                     // Emit an initial state based on current session status or Pending
                     val currentSessionState = splitInstallManager.getSessionState(currentSessionId).await()
                     val initialProgress = if (currentSessionState != null) {
-                        mapSessionStateToInstallProgress(currentSessionState, componentName) // Use new helper
+                        mapSessionStateToInstallProgress(currentSessionState, componentName)
                     } else {
                         DFInstallProgress(DFInstallationState.Pending) // Fallback initial state
                     }
@@ -128,7 +128,7 @@ class DFComponentInstallerManager @Inject constructor(
                     Log.w(TAG, "Listener already active for session $currentSessionId. New listener not registered.")
                     val currentSessionState = splitInstallManager.getSessionState(currentSessionId).await()
                     if (currentSessionState != null) {
-                        trySend(mapSessionStateToInstallProgress(currentSessionState, componentName)) // Use new helper
+                        trySend(mapSessionStateToInstallProgress(currentSessionState, componentName))
                     } else {
                         trySend(DFInstallProgress(DFInstallationState.Unknown)) // Or Failed state
                     }
@@ -172,8 +172,8 @@ class DFComponentInstallerManager @Inject constructor(
      */
     private fun mapSessionStateToInstallProgress(state: SplitInstallSessionState, moduleName: String): DFInstallProgress {
         if (!state.moduleNames().contains(moduleName)) {
-            Log.w(TAG, "State update for session ${state.sessionId()} does not list module $moduleName. Status: ${state.status()}")
-            // Decide how to handle this - maybe return Unknown state?
+            Log.e(TAG, "State update for session ${state.sessionId()} does not list module $moduleName. Status: ${state.status()}")
+            DFInstallProgress(DFInstallationState.Unknown)
         }
 
         val frameworkState: DFInstallationState = when (state.status()) {

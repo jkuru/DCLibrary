@@ -3,7 +3,6 @@ package com.kuru.featureflow.component.register
 /**
  * This will be leveraged by the feature teams in their projects
  *  Post initialization intercepts
- *  Define the module name
  *
  */
 data class DFComponentConfig(

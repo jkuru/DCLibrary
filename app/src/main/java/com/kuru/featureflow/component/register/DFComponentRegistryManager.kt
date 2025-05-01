@@ -9,8 +9,7 @@ import javax.inject.Singleton
 
 @Singleton
 class DFComponentRegistryManager @Inject constructor(
-    private val registryData: ComponentRegistryData,
-    private val services: MutableMap<Class<*>, Any>
+    private val registryData: ComponentRegistryData
 ) : DFComponentRegistry {
 
     init {
@@ -22,7 +21,7 @@ class DFComponentRegistryManager @Inject constructor(
 
     override fun register(dfComponentConfig: DFComponentConfig, screen: @Composable (NavController) -> Unit) {
         registryData.put(dfComponentConfig, screen)
-        Log.d(TAG, "Registered screen for route: ${dfComponentConfig.route}")
+        Log.e(TAG, "Registered screen for route: ${dfComponentConfig.route}")
     }
 
     override fun getScreen(dfComponentConfig: DFComponentConfig): (@Composable (NavController) -> Unit)? {
@@ -32,7 +31,7 @@ class DFComponentRegistryManager @Inject constructor(
     override fun unregister(dfComponentConfig: DFComponentConfig): Boolean {
         val removed = registryData.remove(dfComponentConfig)
         if (removed) {
-            Log.d(TAG, "Unregistered screen for route: ${dfComponentConfig.route}")
+            Log.e(TAG, "Unregistered screen for route: ${dfComponentConfig.route}")
         }
         return removed
     }

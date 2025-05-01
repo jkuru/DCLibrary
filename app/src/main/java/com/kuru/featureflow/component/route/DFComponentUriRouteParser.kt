@@ -33,11 +33,13 @@ class DFComponentUriRouteParser @Inject constructor() {
      * @return A DFComponentRoute object. Status will be "failed" if parsing fails or URI is invalid.
      */
     fun extractRoute(rawURI: String?): DFComponentRoute {
+        // Check if the input URI is null or blank
         if (rawURI.isNullOrBlank()) {
             Log.e(TAG, "Input URI is null or blank.")
             return createFailedRoute("Input URI is null or blank")
         }
 
+        // Attempt to parse the URI string into a Uri object
         val uri: Uri = try {
             Uri.parse(rawURI)
         } catch (e: Exception) {
@@ -45,13 +47,14 @@ class DFComponentUriRouteParser @Inject constructor() {
             return createFailedRoute("URI parsing failed: ${e.message}")
         }
 
+        // Validate the URI path and ensure it starts with the expected prefix
         val path = uri.path
         if (path == null || !path.startsWith(BASE_PATH_PREFIX)) {
             Log.e(TAG, "URI path is null or does not start with $BASE_PATH_PREFIX. Path: $path")
             return createFailedRoute("Invalid path prefix")
         }
 
-        // Use safe access for path segments
+        // Safely access path segments, defaulting to an empty list if null
         val pathSegments = uri.pathSegments ?: emptyList()
         if (pathSegments.isEmpty()) {
             Log.e(TAG, "URI path has no segments after prefix. Path: $path")
@@ -60,7 +63,7 @@ class DFComponentUriRouteParser @Inject constructor() {
         }
 
 
-        // Extract parameters from query safely
+        // Extract query parameters safely into a list
         val params = mutableListOf<String>()
         try { // Catch potential exceptions during query parsing
             uri.queryParameterNames?.forEach { paramName ->
@@ -128,6 +131,12 @@ class DFComponentUriRouteParser @Inject constructor() {
         }
     }
 
+    /**
+     * Creates a DFComponentRoute object with a failed status.
+     *
+     * @param logMessage The message to log for debugging purposes.
+     * @return A DFComponentRoute object with empty fields and "failed" status.
+     */
     private fun createFailedRoute(logMessage: String): DFComponentRoute {
         Log.e(TAG, "Route extraction failed: $logMessage")
         return DFComponentRoute(
