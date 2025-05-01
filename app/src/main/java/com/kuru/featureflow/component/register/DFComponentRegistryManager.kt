@@ -19,12 +19,12 @@ class DFComponentRegistryManager @Inject constructor(
         private const val TAG = "DFRegistryManager"
     }
 
-    override fun register(dfComponentConfig: DFComponentConfig, screen: @Composable (NavController) -> Unit) {
+    override fun register(dfComponentConfig: DFComponentConfig, screen: @Composable (NavController, List<String>) -> Unit) {
         registryData.put(dfComponentConfig, screen)
         Log.e(TAG, "Registered screen for route: ${dfComponentConfig.route}")
     }
 
-    override fun getScreen(dfComponentConfig: DFComponentConfig): (@Composable (NavController) -> Unit)? {
+    override fun getScreen(dfComponentConfig: DFComponentConfig): (@Composable (NavController, List<String>) -> Unit)? {
         return registryData.get(dfComponentConfig)
     }
 

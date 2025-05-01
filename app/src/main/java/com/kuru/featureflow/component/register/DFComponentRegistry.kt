@@ -26,7 +26,7 @@ interface DFComponentRegistry {
      * @param screen A Composable function that renders the feature's UI, taking a
      *               [NavController] for navigation purposes.
      */
-    fun register(dfComponentConfig: DFComponentConfig, screen: @Composable (NavController) -> Unit)
+    fun register(dfComponentConfig: DFComponentConfig, screen: @Composable (NavController, List<String>) -> Unit)
 
     /**
      * Retrieves the screen Composable associated with a given configuration.
@@ -39,7 +39,7 @@ interface DFComponentRegistry {
      * @return The Composable function representing the screen, or null if no screen is
      *         registered for the given configuration.
      */
-    fun getScreen(dfComponentConfig: DFComponentConfig): (@Composable (NavController) -> Unit)?
+    fun getScreen(dfComponentConfig: DFComponentConfig): (@Composable (NavController, List<String>) -> Unit)?
 
     /**
      * Unregisters a dynamic feature's configuration from the registry.

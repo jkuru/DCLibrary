@@ -42,7 +42,15 @@ class DFComponentStateStoreImpl @Inject constructor(
 
     // --- Preference Keys ---
     private object PreferencesKeys {
+        /**
+         * Aspect	LAST_ATTEMPTED_FEATURE_URI	|| LAST_PROCESSED_URI
+         * Scope	Tracks the feature being installed or loaded.	|| Tracks the URI last handled by the activity.
+         * Purpose	Enables retry or resumption of feature installation.	|| Prevents redundant processing of the same URI.
+         * Usage Context	Feature installation logic (e.g., in a view model).	|| Intent/URI processing (e.g., in an activity).
+         * Functionality	Supports resuming interrupted feature loads.	|| Ensures idempotency in handling deep links/intents.
+         */
         val LAST_ATTEMPTED_FEATURE_URI = stringPreferencesKey("last_attempted_feature_uri")
+        val LAST_PROCESSED_URI = stringPreferencesKey("last_processed_uri")
     }
 
     // --- In-Memory State Flows ---

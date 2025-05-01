@@ -25,7 +25,7 @@ import javax.inject.Singleton
 @Singleton
 class ComponentRegistryData @Inject constructor() {
     // Internal mutable map storing dynamic feature configurations and their screen Composables.
-    private val registry: MutableMap<DFComponentConfig, @Composable (NavController) -> Unit> = mutableMapOf()
+    private val registry: MutableMap<DFComponentConfig, @Composable (NavController, List<String>) -> Unit> = mutableMapOf()
 
     /**
      * Registers a dynamic feature's configuration and its associated screen Composable.
@@ -37,7 +37,7 @@ class ComponentRegistryData @Inject constructor() {
      * @param screen The Composable function that renders the feature's UI, accepting a
      *               [NavController] for navigation purposes.
      */
-    fun put(config: DFComponentConfig, screen: @Composable (NavController) -> Unit) {
+    fun put(config: DFComponentConfig, screen: @Composable (NavController,List<String>) -> Unit) {
         registry[config] = screen
     }
 
@@ -51,7 +51,7 @@ class ComponentRegistryData @Inject constructor() {
      * @return The Composable function representing the screen, or null if no screen is
      *         registered for the given configuration.
      */
-    fun get(config: DFComponentConfig): (@Composable (NavController) -> Unit)? {
+    fun get(config: DFComponentConfig): (@Composable (NavController, List<String>) -> Unit)? {
         return registry[config]
     }
 

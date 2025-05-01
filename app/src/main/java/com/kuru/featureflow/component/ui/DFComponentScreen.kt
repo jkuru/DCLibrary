@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle // Use lifecycle-aware collection
+import com.kuru.featureflow.component.state.DFErrorCode
 
 @Composable
 fun DFComponentScreen(viewModel: DFComponentViewModel) {
@@ -73,8 +74,18 @@ fun DFComponentScreen(viewModel: DFComponentViewModel) {
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+                val isRetriableError = when (state.dfErrorCode) {
+                    DFErrorCode.NETWORK_ERROR, // Network error is retriable
+                    DFErrorCode.API_NOT_AVAILABLE, // Might be transient
+                    DFErrorCode.SESSION_NOT_FOUND, // Might be transient
+                    DFErrorCode.ACTIVE_SESSIONS_LIMIT_EXCEEDED, // Might resolve itself
+                    DFErrorCode.INTERNAL_ERROR // Maybe retriable? Use with caution.
+                        -> true
+                    else -> false // Assume other INSTALLATION errors aren't easily retriable by user
+                }
+
                 // Allow retry only for specific error types where it makes sense
-                if (state.errorType == ErrorType.INSTALLATION || state.errorType == ErrorType.NETWORK) {
+                if (isRetriableError) {
                     Button(onClick = { viewModel.processIntent(DFComponentIntent.Retry) }) {
                         Text("Retry")
                     }
