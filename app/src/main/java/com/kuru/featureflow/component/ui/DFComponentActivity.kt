@@ -30,7 +30,7 @@ import javax.inject.Inject
 class DFComponentActivity : ComponentActivity() {
 
     private val viewModel: DFComponentViewModel by viewModels()
-
+    private var lastProcessedUri: String? = null
     @Inject
     lateinit var splitInstallManager: SplitInstallManager
 
@@ -99,7 +99,7 @@ class DFComponentActivity : ComponentActivity() {
                 // --- Conditionally Render Content ---
                 if (dynamicScreenLambda != null && uiState is DFComponentState.Success) {
                     // If we have the lambda and state is Success, invoke the dynamic screen
-                    Log.d(
+                    Log.e(
                         TAG,
                         "Rendering dynamic screen content for feature: ${(uiState as DFComponentState.Success).feature}"
                     )
@@ -108,7 +108,7 @@ class DFComponentActivity : ComponentActivity() {
                     // Optional: Add DisposableEffect to clear content when leaving this scope
                     DisposableEffect(Unit) {
                         onDispose {
-                            Log.d(TAG, "Leaving dynamic screen scope, clearing content.")
+                            Log.e(TAG, "Leaving dynamic screen scope, clearing content.")
                             // Clear when navigating back or component is disposed
                             viewModel.clearDynamicContent()
                         }
@@ -129,7 +129,7 @@ class DFComponentActivity : ComponentActivity() {
                 is DFComponentState.RequiresConfirmation -> {
                     // Only launch if we aren't already awaiting confirmation for this specific feature
                     if (_featureAwaitingConfirmation != uiState.feature) {
-                        Log.d(
+                        Log.e(
                             TAG,
                             "RequiresConfirmation state observed for feature: ${uiState.feature}"
                         )
@@ -141,7 +141,7 @@ class DFComponentActivity : ComponentActivity() {
                         if (sessionStateToConfirm != null) {
                             // Store the feature name *before* launching the dialog
                             _featureAwaitingConfirmation = uiState.feature
-                            Log.d(
+                            Log.e(
                                 TAG,
                                 "Attempting to launch confirmation dialog for feature: ${uiState.feature} with Session ID: ${sessionStateToConfirm.sessionId()}"
                             )
@@ -173,7 +173,7 @@ class DFComponentActivity : ComponentActivity() {
                             // viewModel.processIntent(DFComponentIntent.HandleInternalError(...))
                         }
                     } else {
-                        Log.d(
+                        Log.e(
                             TAG,
                             "RequiresConfirmation state for ${uiState.feature} is already being handled (dialog likely showing)."
                         )
@@ -184,7 +184,7 @@ class DFComponentActivity : ComponentActivity() {
                     // If the feature that just succeeded is the one we were awaiting confirmation for,
                     // clear the tracking variable (though it should also be cleared by the ActivityResult callback)
                     if (_featureAwaitingConfirmation == uiState.feature) {
-                        Log.d(
+                        Log.e(
                             TAG,
                             "Feature $_featureAwaitingConfirmation succeeded, clearing tracking variable."
                         )
@@ -193,7 +193,7 @@ class DFComponentActivity : ComponentActivity() {
 
                     if (uiState.featureInstallationState is DFInstallationState.Installed) {
                         val featureName = uiState.feature
-                        Log.d(TAG, "Feature $featureName reached Installed state.")
+                        Log.e(TAG, "Feature $featureName reached Installed state.")
                         // TODO: Trigger navigation to the actual feature screen here.
                         // Example: FindNavController().navigate(featureName)
                         // Example: setResult(Activity.RESULT_OK); finish()
@@ -232,8 +232,6 @@ class DFComponentActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent == null) {
             Log.w(TAG, "handleIntent received a null intent.")
-            // Consider finishing or showing an error if the activity requires an intent
-            // finish()
             return
         }
 
@@ -243,27 +241,26 @@ class DFComponentActivity : ComponentActivity() {
             else -> null
         }
 
-        if (uriString != null) {
-            Log.d(TAG, "Processing URI: $uriString")
-            processRoute(uriString)
-        } else {
-            Log.w(
-                TAG,
-                "Intent received without actionable URI (Action: ${intent.action}, Has Extra: ${
-                    intent.hasExtra(EXTRA_TARGET)
-                })"
-            )
-            // Handle invalid/unusable intents (e.g., finish, show error)
-            // Maybe load a default state via ViewModel?
-            // finish()
+        if (uriString == null) {
+            Log.w(TAG, "Intent received without actionable URI")
+            return
         }
+
+        // Skip if the URI was already processed
+        if (uriString == lastProcessedUri) {
+            Log.d(TAG, "Skipping duplicate URI: $uriString")
+            return
+        }
+        lastProcessedUri = uriString
+        Log.d(TAG, "Processing URI: $uriString")
+        processRoute(uriString)
     }
 
     private fun processRoute(uri: String) {
         val dynamicRoute = componentUriRouteParser.extractRoute(uri)
 
         if (dynamicRoute.status == "success" && dynamicRoute.route.isNotEmpty()) {
-            Log.d(
+            Log.e(
                 TAG,
                 "Extracted valid route: ${dynamicRoute.route}. Dispatching LoadFeature intent."
             )

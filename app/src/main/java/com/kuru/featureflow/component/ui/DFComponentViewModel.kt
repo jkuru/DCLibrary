@@ -79,7 +79,7 @@ class DFComponentViewModel @Inject constructor(
     // --- ADD StateFlow for the Dynamic Screen Composable ---
     private val _dynamicScreenContent = MutableStateFlow<(@Composable (NavController) -> Unit)?>(null)
     val dynamicScreenContent: StateFlow<(@Composable (NavController) -> Unit)?> = _dynamicScreenContent.asStateFlow()
-
+    private val processedFeatures = mutableSetOf<String>()
 
     private var currentInstallJob: Job? = null
     // --- ADDED: Store for the raw Play Core state when confirmation is needed ---
@@ -94,7 +94,7 @@ class DFComponentViewModel @Inject constructor(
 
     // --- ADD Function to clear dynamic content when navigating away or reloading ---
     fun clearDynamicContent() {
-        Log.d(TAG, "Clearing dynamic screen content.")
+        Log.e(TAG, "Clearing dynamic screen content.")
         _dynamicScreenContent.value = null
         // Also reset UI state if appropriate, e.g., back to loading for next feature?
         // _uiState.value = DFComponentState.Loading // Optional: Reset UI state
@@ -102,7 +102,7 @@ class DFComponentViewModel @Inject constructor(
     // ---
 
     fun processIntent(intent: DFComponentIntent) {
-        Log.d(TAG, "Processing intent: $intent")
+        Log.e(TAG, "Processing intent: $intent")
         // Clear previous dynamic content when loading a new feature
         if (intent is DFComponentIntent.LoadFeature) {
             clearDynamicContent()
@@ -119,10 +119,15 @@ class DFComponentViewModel @Inject constructor(
 
 
     private fun loadFeature(feature: String) {
+        // Skip if feature is already processed successfully
+        if (processedFeatures.contains(feature) && uiState.value is DFComponentState.Success) {
+            Log.d(TAG, "Skipping loadFeature for already processed feature: $feature")
+            return
+        }
         if (_currentFeature.value != feature) {
             currentInstallJob?.cancel(CancellationException("New feature load requested: $feature"))
             currentInstallJob = null
-            Log.d(TAG,"Cancelled previous job for feature: ${_currentFeature.value}")
+            Log.e(TAG,"Cancelled previous job for feature: ${_currentFeature.value}")
             // Clear pending confirmation state if feature changes
             pendingConfirmationState = null
         }
@@ -138,7 +143,7 @@ class DFComponentViewModel @Inject constructor(
                 }
 
                 if (installer.isComponentInstalled(feature)) {
-                    Log.d(TAG, "Feature $feature already installed. Running post-install steps.")
+                    Log.e(TAG, "Feature $feature already installed. Running post-install steps.")
                     // Ensure registration happened (idempotent) - Pass context
                     try {
                         runServiceLoaderInitialization(feature, context) // Pass context
@@ -150,8 +155,9 @@ class DFComponentViewModel @Inject constructor(
                     runPostInstallInterceptors(feature) // Needs to run within a coroutine if using withContext
                     // --- Fetch and set screen content for already installed feature ---
                     fetchAndSetDynamicScreen(feature)
+                    processedFeatures.add(feature)
                 } else {
-                    Log.d(TAG, "Feature $feature not installed. Starting installation process.")
+                    Log.e(TAG, "Feature $feature not installed. Starting installation process.")
                     initiateInstallation(feature)
                 }
             } catch (e: CancellationException) {
@@ -177,7 +183,7 @@ class DFComponentViewModel @Inject constructor(
 
         currentInstallJob = viewModelScope.launch { // Launch specific job for collection
             try {
-                Log.d(TAG, "Initiating installation flow collection for: $feature")
+                Log.e(TAG, "Initiating installation flow collection for: $feature")
                 _uiState.value = DFComponentState.Loading // Show loading
 
                 // Run generic pre-install checks (consider moving after config load if needed)
@@ -193,16 +199,16 @@ class DFComponentViewModel @Inject constructor(
                         val frameworkState = installProgress.frameworkState
                         val playCoreState = installProgress.playCoreState // May be null
 
-                        Log.d(TAG, "Received installation state for $feature: $frameworkState")
+                        Log.e(TAG, "Received installation state for $feature: $frameworkState")
 
                         // --- Store Play Core state if confirmation is required ---
                         if (frameworkState is DFInstallationState.RequiresConfirmation) {
                             pendingConfirmationState = playCoreState
-                            Log.d(TAG, "Stored pendingConfirmationState for feature $feature, Session ID: ${playCoreState?.sessionId()}")
+                            Log.e(TAG, "Stored pendingConfirmationState for feature $feature, Session ID: ${playCoreState?.sessionId()}")
                         } else if (pendingConfirmationState != null && frameworkState !is DFInstallationState.Pending) {
                             // Clear the state if no longer requiring confirmation or pending
                             // Avoid clearing immediately on Pending, wait for next state.
-                            Log.d(TAG, "Clearing pendingConfirmationState for feature $feature as state is $frameworkState")
+                            Log.e(TAG, "Clearing pendingConfirmationState for feature $feature as state is $frameworkState")
                             pendingConfirmationState = null
                         }
                         // ---
@@ -214,11 +220,12 @@ class DFComponentViewModel @Inject constructor(
 
                         // Handle terminal states
                         if (frameworkState is DFInstallationState.Installed) {
-                            Log.d(TAG, "Installation successful for $feature. Running post-install steps.")
+                            Log.e(TAG, "Installation successful for $feature. Running post-install steps.")
                             runServiceLoaderInitialization(feature, context) // Pass context
                             runPostInstallInterceptors(feature) // Needs coroutine context
                             // --- Fetch and set screen content after installation ---
                             fetchAndSetDynamicScreen(feature)
+                            processedFeatures.add(feature) // Mark as processed
                         } else if (frameworkState is DFInstallationState.Failed) {
                             Log.e(TAG, "Installation failed for $feature with code: ${frameworkState.errorCode}")
                         } else if (frameworkState is DFInstallationState.Canceled) {
@@ -241,7 +248,7 @@ class DFComponentViewModel @Inject constructor(
 
     // --- ADDED: Function to fetch screen lambda from registry ---
     private fun fetchAndSetDynamicScreen(feature: String) {
-        Log.d(TAG, "Attempting to fetch screen lambda for feature: $feature")
+        Log.e(TAG, "Attempting to fetch screen lambda for feature: $feature")
         val config = registry.getConfig(feature)
         if (config != null) {
             val screenLambda = registry.getScreen(config)
@@ -262,7 +269,7 @@ class DFComponentViewModel @Inject constructor(
     // ---
 
     private fun runGenericPreInstallChecks(feature: String): Boolean {
-        Log.d(TAG, "Running generic pre-install checks for $feature")
+        Log.e(TAG, "Running generic pre-install checks for $feature")
         // Example: Check network, storage etc.
         return true
     }
@@ -271,7 +278,7 @@ class DFComponentViewModel @Inject constructor(
         viewModelScope.launch {
             val lastFeature = stateStore.getLastAttemptedFeature()
             if (lastFeature != null) {
-                Log.d(TAG, "Retrying feature: $lastFeature")
+                Log.e(TAG, "Retrying feature: $lastFeature")
                 loadFeature(lastFeature) // This will cancel existing job and restart
             } else {
                 Log.w(TAG, "No last attempted feature found to retry.")
@@ -282,7 +289,7 @@ class DFComponentViewModel @Inject constructor(
 
     // Renamed from confirmInstallation for clarity - this is called *after* user confirms in Play dialog
     private fun handleInstallationConfirmed(feature: String) {
-        Log.d(TAG, "User confirmation handled for feature: $feature. Installation should resume automatically via listener.")
+        Log.e(TAG, "User confirmation handled for feature: $feature. Installation should resume automatically via listener.")
         // Clear the locally stored state as Play Core takes over now
         pendingConfirmationState = null
         // Optionally update UI state if needed, e.g., back to Loading
@@ -295,7 +302,7 @@ class DFComponentViewModel @Inject constructor(
     private fun runServiceLoaderInitialization(feature: String, context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Running ServiceLoader initialization for feature: $feature on ${Thread.currentThread().name}")
+                Log.e(TAG, "Running ServiceLoader initialization for feature: $feature on ${Thread.currentThread().name}")
                 // Ensure the correct classloader is used, especially after module install
                 val classLoader = context.classLoader
                 val serviceLoader = ServiceLoader.load(DFComponentEntry::class.java, classLoader)
@@ -336,7 +343,7 @@ class DFComponentViewModel @Inject constructor(
             return true
         }
         val preInstallInterceptors = config.listOfDFComponentInterceptor.filter { it.preInstall }
-        Log.d(TAG, "Running ${preInstallInterceptors.size} pre-install interceptors for $feature")
+        Log.e(TAG, "Running ${preInstallInterceptors.size} pre-install interceptors for $feature")
         for ((index, interceptor) in preInstallInterceptors.withIndex()) {
             val interceptorId = "$feature-pre-$index"
             stateStore.setInterceptorState(interceptorId, DFInterceptorState.Active)
@@ -370,7 +377,7 @@ class DFComponentViewModel @Inject constructor(
             return
         }
         val postInstallInterceptors = config.listOfDFComponentInterceptor.filter { !it.preInstall }
-        Log.d(TAG, "Running ${postInstallInterceptors.size} post-install interceptors for $feature")
+        Log.e(TAG, "Running ${postInstallInterceptors.size} post-install interceptors for $feature")
         for ((index, interceptor) in postInstallInterceptors.withIndex()) {
             val interceptorId = "$feature-post-$index"
             stateStore.setInterceptorState(interceptorId, DFInterceptorState.Active)
