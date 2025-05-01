@@ -37,13 +37,34 @@ class DFComponentInstallerManager @Inject constructor(
 
     private val activeListeners = ConcurrentHashMap<Int, SplitInstallStateUpdatedListener>()
 
-    override fun isComponentInstalled(componentName: String): Boolean {
-        val installed = splitInstallManager.installedModules.contains(componentName)
-        Log.e(TAG, "isComponentInstalled($componentName): $installed")
-        return installed
+    override suspend fun isComponentInstalled(componentName: String): Boolean {
+        if (componentName.isBlank()) {
+            Log.e(TAG, "Invalid component name: $componentName")
+            return false
+        }
+        val installedModules = splitInstallManager.installedModules
+        val isInInstalledModules = installedModules.contains(componentName)
+        Log.e(TAG, "isComponentInstalled($componentName): $isInInstalledModules (installedModules: $installedModules)")
+
+        if (isInInstalledModules) {
+            // Cross-check with session states to confirm
+            runCatching {
+                val sessions = splitInstallManager.sessionStates.await()
+                val isFullyInstalled = sessions.any { session ->
+                    session.moduleNames().contains(componentName) &&
+                            session.status() == SplitInstallSessionStatus.INSTALLED
+                }
+                Log.e(TAG, "Session state check for $componentName: $isFullyInstalled")
+                return isFullyInstalled
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to check session states for $componentName", e)
+            }
+            return true // Fallback to installedModules if session check fails
+        }
+        return false
     }
 
-    override fun installComponent(componentName: String): Flow<DFInstallProgress> { // Changed return type
+    override suspend fun installComponent(componentName: String): Flow<DFInstallProgress> { // Changed return type
         if (isComponentInstalled(componentName)) {
             Log.e(TAG, "Install requested for already installed component: $componentName")
             // Wrap the final state in InstallProgress
@@ -126,7 +147,7 @@ class DFComponentInstallerManager @Inject constructor(
         }
     }
 
-    override fun retryComponentInstall(componentName: String): Flow<DFInstallProgress> { // Changed return type
+    override suspend fun retryComponentInstall(componentName: String): Flow<DFInstallProgress> { // Changed return type
         Log.e(TAG, "Retry requested for $componentName. Starting installation flow.")
         return installComponent(componentName)
     }

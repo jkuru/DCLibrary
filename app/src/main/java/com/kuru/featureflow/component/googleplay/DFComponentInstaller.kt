@@ -12,7 +12,7 @@ interface DFComponentInstaller {
      * @param componentName The name of the dynamic feature module.
      * @return True if the module is installed, false otherwise.
      */
-    fun isComponentInstalled(componentName: String): Boolean
+    suspend fun isComponentInstalled(componentName: String): Boolean
 
     /**
      * Initiates the installation process for a component and returns a Flow
@@ -20,7 +20,7 @@ interface DFComponentInstaller {
      * @param componentName The name of the dynamic feature module to install.
      * @return A Flow emitting InstallProgress updates.
      */
-    fun installComponent(componentName: String): Flow<DFInstallProgress> // Changed return type
+    suspend fun installComponent(componentName: String): Flow<DFInstallProgress> // Changed return type
 
     /**
      * Retries the installation for a component. This typically involves
@@ -28,5 +28,5 @@ interface DFComponentInstaller {
      * @param componentName The name of the dynamic feature module to retry.
      * @return A Flow emitting InstallProgress updates for the retry attempt.
      */
-    fun retryComponentInstall(componentName: String): Flow<DFInstallProgress> // Changed return type
+    suspend fun retryComponentInstall(componentName: String): Flow<DFInstallProgress> // Changed return type
 }
