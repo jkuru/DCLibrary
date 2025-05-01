@@ -151,10 +151,6 @@ class DFComponentViewModel @Inject constructor(
                         Log.e(TAG, "Failed to run ServiceLoader for feature $feature", e)
                         throw e
                     }
-                    // Run post-install interceptors (idempotent)
-                    runPostInstallInterceptors(feature) // Needs to run within a coroutine if using withContext
-                    // --- Fetch and set screen content for already installed feature ---
-                    fetchAndSetDynamicScreen(feature)
                     processedFeatures.add(feature)
                 } else {
                     Log.e(TAG, "Feature $feature not installed. Starting installation process.")
@@ -222,9 +218,6 @@ class DFComponentViewModel @Inject constructor(
                         if (frameworkState is DFInstallationState.Installed) {
                             Log.e(TAG, "Installation successful for $feature. Running post-install steps.")
                             runServiceLoaderInitialization(feature, context) // Pass context
-                            runPostInstallInterceptors(feature) // Needs coroutine context
-                            // --- Fetch and set screen content after installation ---
-                            fetchAndSetDynamicScreen(feature)
                             processedFeatures.add(feature) // Mark as processed
                         } else if (frameworkState is DFInstallationState.Failed) {
                             Log.e(TAG, "Installation failed for $feature with code: ${frameworkState.errorCode}")
@@ -327,6 +320,9 @@ class DFComponentViewModel @Inject constructor(
                     handleErrorState(feature, ErrorType.SERVICE_LOADER, "Feature components failed to initialize.", DFErrorCode.INTERNAL_ERROR)
                 } else {
                     Log.i(TAG, "ServiceLoader initialization appears successful for $feature")
+                    runPostInstallInterceptors(feature) // Needs coroutine context
+                    // --- Fetch and set screen content after installation ---
+                    fetchAndSetDynamicScreen(feature)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to run ServiceLoader for feature $feature", e)
