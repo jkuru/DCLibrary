@@ -2,7 +2,9 @@
 
 ## Overview
 
-FeatureFlow is an Android framework designed to simplify the management, installation, and loading of Dynamic Feature Modules (DFMs) using the Play Core Install API. It provides a structured approach based on Clean Architecture principles (UI, Domain, Data layers) and leverages modern Android development practices like Jetpack Compose, Coroutines Flow, Hilt, and DataStore.
+FeatureFlow is an Android framework designed to simplify the management, installation, and loading of Dynamic Feature Modules (DFMs) using the Play Core Install API.
+It provides a structured approach based on Clean Architecture principles (UI, Domain, Data layers)
+and leverages modern Android development practices like Jetpack Compose, Coroutines Flow, Hilt, and DataStore.
 
 The framework handles:
 * URI-based routing to trigger feature loading.
