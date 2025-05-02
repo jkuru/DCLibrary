@@ -1,97 +1,130 @@
 package com.kuru.featureflow.component.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.* // Import necessary layout components
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle // Use lifecycle-aware collection
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kuru.featureflow.component.state.DFErrorCode
 
 @Composable
 fun DFComponentScreen(viewModel: DFComponentViewModel) {
-    // Use collectAsStateWithLifecycle for better lifecycle awareness
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Center content for loading/error/confirmation states
-    Column(
-        modifier = Modifier.padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    // Use Box for simpler centering when possible, apply edge-to-edge padding
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // Apply padding that respects system bars (status, navigation)
+            // This allows the Box background/content to go edge-to-edge
+            // while keeping the main content within safe areas.
+            .windowInsetsPadding(WindowInsets.safeDrawing), // Use safeDrawing or systemBars
+        contentAlignment = Alignment.Center // Center content within the Box
     ) {
-        when (val state = uiState) { // Use 'state' variable for smart casting
-            is DFComponentState.Loading -> {
-                Text("Loading feature...")
-                Spacer(modifier = Modifier.height(8.dp))
-                CircularProgressIndicator()
-            }
-            is DFComponentState.RequiresConfirmation -> {
-                Text("Confirmation Required for feature: ${state.feature}")
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Please confirm the installation when prompted.")
-                Spacer(modifier = Modifier.height(8.dp))
-                // Usually, the system dialog handles confirmation.
-                // You might show a loading indicator here or a disabled button.
-                CircularProgressIndicator() // Indicate waiting for user action
-                // Button(onClick = { /* Maybe trigger confirmation again? Unlikely needed */ }, enabled = false) {
-                //     Text("Waiting for Confirmation")
-                // }
-            }
-            is DFComponentState.Success -> {
-                // Display success information - specific UI depends on the feature
-                Text("Feature Loaded: ${state.feature}")
-                Spacer(modifier = Modifier.height(8.dp))
-                // Displaying the raw InstallationState might not be user-friendly
-                // Adapt this based on what the user needs to see
-                Text("Status: ${state.featureInstallationState::class.simpleName}")
-                // TODO: Add navigation or display the actual feature UI here
-            }
-            is DFComponentState.Error -> {
-                Text(
-                    "Error Loading Feature: ${state.feature ?: "Unknown"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.error
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Message: ${state.message}",
-                    color = MaterialTheme.colorScheme.error
-                )
-                state.dfErrorCode?.let {
-                    Text(
-                        "Code: ${it.name}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                val isRetriableError = when (state.dfErrorCode) {
-                    DFErrorCode.NETWORK_ERROR, // Network error is retriable
-                    DFErrorCode.API_NOT_AVAILABLE, // Might be transient
-                    DFErrorCode.SESSION_NOT_FOUND, // Might be transient
-                    DFErrorCode.ACTIVE_SESSIONS_LIMIT_EXCEEDED, // Might resolve itself
-                    DFErrorCode.INTERNAL_ERROR // Maybe retriable? Use with caution.
-                        -> true
-                    else -> false // Assume other INSTALLATION errors aren't easily retriable by user
-                }
+        // Delegate rendering based on state to helper Composables
+        when (val state = uiState) {
+            is DFComponentState.Loading -> LoadingIndicator()
+            is DFComponentState.RequiresConfirmation -> ConfirmationPrompt(state.feature)
+            // Option B: Treat Success state here as final loading step before lambda swap
+            is DFComponentState.Success -> LoadingIndicator("Loading feature UI...")
+            is DFComponentState.Error -> ErrorMessage(
+                errorState = state,
+                onRetry = { viewModel.processIntent(DFComponentIntent.Retry) }
+            )
+            // Removed explicit Success case (Option A) OR simplified it (Option B shown above)
+        }
+    }
+}
 
-                // Allow retry only for specific error types where it makes sense
-                if (isRetriableError) {
-                    Button(onClick = { viewModel.processIntent(DFComponentIntent.Retry) }) {
-                        Text("Retry")
-                    }
-                }
+// --- Helper Composables for each state ---
+
+@Composable
+private fun LoadingIndicator(text: String = "Loading feature...") {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text, style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.height(16.dp))
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun ConfirmationPrompt(feature: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "Confirmation Required",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Installation for '$feature' requires your approval. Please check for a system dialog.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp) // Add horizontal padding for text readability
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        CircularProgressIndicator() // Show activity while waiting for dialog interaction
+    }
+}
+
+@Composable
+private fun ErrorMessage(errorState: DFComponentState.Error, onRetry: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 16.dp) // Add horizontal padding for text
+    ) {
+        Text(
+            "Error Loading Feature",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center
+        )
+        // User-friendly message based on ErrorType (example)
+        val userMessage = when(errorState.errorType) {
+            ErrorType.NETWORK -> "Please check your network connection and try again."
+            ErrorType.STORAGE -> "Not enough storage space to install the feature."
+            ErrorType.URI_INVALID -> "The requested link seems to be invalid."
+            ErrorType.INSTALLATION -> "Installation failed. (${errorState.dfErrorCode?.name ?: "Unknown reason"})" // Show code conditionally
+            else -> errorState.message // Fallback to original message
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            userMessage,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center
+        )
+        // Optionally show technical details if needed for debugging
+        // errorState.dfErrorCode?.let { code ->
+        //     Text(
+        //         "Details: ${code.name} (${code.code})",
+        //         style = MaterialTheme.typography.bodySmall,
+        //         color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+        //     )
+        // }
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Determine if retry makes sense
+        val allowRetry = when (errorState.errorType) {
+            ErrorType.NETWORK, ErrorType.UNKNOWN -> true // Always allow retry for network/unknown?
+            ErrorType.INSTALLATION -> when (errorState.dfErrorCode) { // Retry specific installation errors
+                DFErrorCode.NETWORK_ERROR,
+                DFErrorCode.API_NOT_AVAILABLE,
+                DFErrorCode.SESSION_NOT_FOUND,
+                DFErrorCode.ACTIVE_SESSIONS_LIMIT_EXCEEDED,
+                DFErrorCode.INTERNAL_ERROR -> true
+                else -> false
             }
-            // No 'else' needed because sealed class is exhaustive with all branches covered
+            else -> false // Don't allow retry for validation, storage, URI errors by default
+        }
+
+        if (allowRetry) {
+            Button(onClick = onRetry) {
+                Text("Retry")
+            }
         }
     }
 }
