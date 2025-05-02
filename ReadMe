@@ -260,6 +260,40 @@ ServiceLoader Called (in Base Module): Your framework code, likely running in th
 Instance Created (by ServiceLoader): ServiceLoader scans the classpath (using the provided classloader which now includes the dynamic module), finds the META-INF/services/ file, reads the class name (com.kuru.featureflow.plant.PlantEntry), and uses reflection to load and instantiate PlantEntry. At this point, the PlantEntry object exists.
 initialize() Called (in Base Module): The framework code then iterates through the instances provided by ServiceLoader and calls entry.initialize().
 
+/**
+        Here's a breakdown of the data flow after the user confirms the installation:
+
+        1. **User Confirmation**: The user presses "OK" (or the equivalent positive action) in the Google Play confirmation dialog.
+        2. **Activity Result**: Your `DFComponentActivity` receives the `Activity.RESULT_OK` via the `confirmationResultLauncher`.
+        3. **ViewModel Intent**: The Activity calls `viewModel.processIntent(DFComponentIntent.ConfirmInstallation(confirmedFeature))`.
+        4. **`handleInstallationConfirmed` Called**: The ViewModel executes this function.
+        - It clears the `pendingConfirmationState`.
+        - Crucially (based on the provided code): It sets the `_uiState` back to `DFComponentState.Loading` (`_uiState.value = DFComponentState.Loading`). It doesn't directly call `loadFeature` again in this version. The idea is that Play Core's background process will automatically resume the installation, and the existing listener/collector will pick up the new states.
+        5. **Installation Resumes**: Google Play Core resumes the installation process in the background.
+        6. **State Updates via Collector**: The `collect` block inside `initiateInstallation` (which is likely still running or resumes) starts receiving updated `DFInstallationState` from the `installer.installComponent(feature)` flow (e.g., `Downloading`, `Installing`).
+        7. **UI State Updates**: `updateUiStateFromInstallationState` is called with these new states, potentially keeping the UI in `DFComponentState.Loading` or reflecting progress if you modified it.
+        8. **Installation Completes**: The collector eventually receives `DFInstallationState.Installed`.
+        9. **Post-Install Steps**:
+        - `updateUiStateFromInstallationState` sets `_uiState.value` to `DFComponentState.Success(...)`. At this point, `_dynamicScreenContent` is still `null`.
+        - The collector then calls `runServiceLoaderInitialization`.
+        10. **Lambda Fetching**:
+        - `runServiceLoaderInitialization` (after initializing components) calls `fetchAndSetDynamicScreen`.
+        - `fetchAndSetDynamicScreen` retrieves the Composable lambda (`screenLambda`) from the registry.
+        - It sets `_dynamicScreenContent.value = screenLambda`.
+        - It also sets `_uiState.value = DFComponentState.Success(...)` again (ensuring the final state reflects success with content ready).
+        11. **Activity Observation & Navigation**:
+        - Your `DFComponentActivity` collects both `uiState` and `dynamicScreenContent` using `collectAsStateWithLifecycle`.
+        - When the state updates from step 10 propagate to the Activity, the `setContent` block recomposes.
+        - The condition `if (dynamicScreenLambda != null && uiState is DFComponentState.Success)` becomes true.
+        - The code `dynamicScreenLambda?.invoke(navController)` is executed, which effectively navigates to or displays the dynamic feature's UI.
+
+        In summary:  the user confirmation eventually leads to state changes observed by the Activity,
+        which in turn trigger the navigation/display of the dynamic feature.
+        The key is that it's not `handleInstallationConfirmed` directly restarting the entire load, but rather resetting the UI state while the underlying Play Core listener picks up the resumed installation,
+        eventually leading to both the `Success` state and the `dynamicScreenContent` lambda becoming available for the Activity to use.
+         */
+
+
 ./gradlew :app:publishToMavenLocal
 
 ls ~/.m2/repository/com/kuru/featureflow/2.0.0/

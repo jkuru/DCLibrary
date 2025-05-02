@@ -8,11 +8,15 @@ import com.google.android.play.core.splitinstall.SplitInstallManager
 import com.google.android.play.core.splitinstall.SplitInstallManagerFactory
 import com.kuru.featureflow.component.googleplay.DFComponentInstaller
 import com.kuru.featureflow.component.googleplay.DFComponentInstallerManager
+import com.kuru.featureflow.component.interceptor.DFInterceptor
+import com.kuru.featureflow.component.interceptor.DFInterceptorManager
 import com.kuru.featureflow.component.register.ComponentRegistryData
 import com.kuru.featureflow.component.register.DFComponentRegistry
 import com.kuru.featureflow.component.register.DFComponentRegistryManager
 import com.kuru.featureflow.component.route.DFComponentRoute
 import com.kuru.featureflow.component.route.DFComponentUriRouteParser
+import com.kuru.featureflow.component.serviceloader.DFServiceLoader
+import com.kuru.featureflow.component.serviceloader.DFServiceLoaderManager
 import com.kuru.featureflow.component.state.DFComponentStateStore
 import com.kuru.featureflow.component.state.DFComponentStateStoreImpl
 import dagger.Binds
@@ -56,12 +60,6 @@ object AppModule {
     fun provideApplicationScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    @Provides
-    @Singleton
-    fun provideServiceMap(): MutableMap<Class<*>, Any> {
-        return mutableMapOf()
-    }
-
 }
 
 @Module
@@ -85,5 +83,17 @@ abstract class FrameworkBindingsModule {
     abstract fun bindDFComponentRegistry(
         impl: DFComponentRegistryManager
     ): DFComponentRegistry
+
+    @Binds
+    @Singleton
+    abstract fun bindDFInterceptorManager(
+        impl: DFInterceptorManager
+    ): DFInterceptor
+
+    @Binds
+    @Singleton
+    abstract fun bindDDFServiceLoader(
+        impl: DFServiceLoaderManager
+    ): DFServiceLoader
 
 }
