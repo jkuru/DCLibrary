@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.google.android.play.core.splitinstall.SplitInstallSessionState
+// Import domain layer components used by the ViewModel
 import com.kuru.featureflow.component.domain.DFInstallationMonitoringEvent
 import com.kuru.featureflow.component.domain.DFLoadFeatureResult
 import com.kuru.featureflow.component.domain.DFLoadFeatureUseCase
@@ -15,11 +16,14 @@ import com.kuru.featureflow.component.domain.DFProcessUriUseCase
 import com.kuru.featureflow.component.domain.DFRunPostInstallResult
 import com.kuru.featureflow.component.domain.DFRunPostInstallStepsUseCase
 import com.kuru.featureflow.component.domain.Step
+// Import state management components
 import com.kuru.featureflow.component.state.DFComponentStateStore
 import com.kuru.featureflow.component.state.DFErrorCode
 import com.kuru.featureflow.component.state.DFHandleErrorUseCase
 import com.kuru.featureflow.component.state.DFInstallationState
+// Hilt annotation for ViewModel injection
 import dagger.hilt.android.lifecycle.HiltViewModel
+// Coroutine utilities
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
@@ -30,46 +34,85 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+// Dependency Injection
 import javax.inject.Inject
 
+/**
+ * Represents the various states the UI can be in while loading or interacting
+ * with a dynamic feature. This is observed by the UI (Activity/Compose screen)
+ * to render the appropriate content.
+ */
 sealed class DFComponentState {
+    /** Indicates the feature is currently being loaded or installed. */
     data object Loading : DFComponentState()
+
+    /** Indicates an error occurred during the process. */
     data class Error(
-        val message: String,
-        val errorType: ErrorType,
-        val feature: String? = null,
-        val dfErrorCode: DFErrorCode? = null
+        val message: String,        // User-friendly error message
+        val errorType: ErrorType,   // Category of the error
+        val feature: String? = null,// Feature associated with the error, if known
+        val dfErrorCode: DFErrorCode? = null // Specific Play Core error code, if applicable
     ) : DFComponentState()
 
+    /** Indicates Play Core requires user confirmation to proceed with installation. */
     data class RequiresConfirmation(val feature: String) : DFComponentState()
+
+    /**
+     * Indicates the feature is successfully installed and post-install steps are done.
+     * Note: The actual UI might be rendered via `dynamicScreenContent` later.
+     * This state confirms readiness.
+     */
     data class Success(
-        val feature: String,
-        val featureInstallationState: DFInstallationState,
-        val params: List<String> = emptyList()
+        val feature: String,                   // Name of the successfully loaded feature
+        val featureInstallationState: DFInstallationState, // Specific state (usually Installed)
+        val params: List<String> = emptyList() // Parameters passed during loading
     ) : DFComponentState()
 }
 
-
+/**
+ * Categorizes the types of errors that can occur, used in [DFComponentState.Error].
+ */
 enum class ErrorType {
     NETWORK, STORAGE, INSTALLATION, VALIDATION, URI_INVALID,
     SERVICE_LOADER, UNKNOWN, PRE_INSTALL_INTERCEPTOR, POST_INSTALL_INTERCEPTOR
 }
 
-
+/**
+ * Represents user actions or events that the ViewModel needs to process.
+ * Dispatched from the UI (Activity/Compose screen).
+ */
 sealed class DFComponentIntent {
-    data class LoadFeature(val feature: String, val params: List<String>) :
-        DFComponentIntent() // e.g.,params =  ["userId=123", "key=value"]
+    /** Intent to load a specific dynamic feature with optional parameters. */
+    data class LoadFeature(val feature: String, val params: List<String>) : DFComponentIntent()
 
+    /** Intent to retry the last failed feature load attempt. */
     object Retry : DFComponentIntent()
-    data class UserConfirmationResult(val feature: String,val confirmed: Boolean) : DFComponentIntent()
+
+    /** Intent reporting the result of the user confirmation dialog shown by the Activity. */
+    data class UserConfirmationResult(val feature: String, val confirmed: Boolean) : DFComponentIntent()
+
+    /** Intent to process a URI, typically from a deep link or initial activity intent. */
     data class ProcessUri(val uri: String) : DFComponentIntent()
 }
 
-// --- ViewModel Event for triggering side-effects in Activity ---
-// Encapsulates data needed for confirmation dialog
+/**
+ * Data class encapsulating the necessary information to show the Play Core confirmation dialog.
+ * Emitted as a one-time event via `eventFlow`.
+ */
 data class ConfirmationEventData(val feature: String, val sessionState: SplitInstallSessionState)
 
-
+/**
+ * ViewModel responsible for orchestrating the loading, installation, and display
+ * of dynamic feature modules. It manages the UI state, handles user intents,
+ * interacts with domain use cases, and communicates events back to the UI (Activity).
+ *
+ * @property stateStore Access to persistent and in-memory state (last attempt, install status).
+ * @property loadFeatureUseCase Use case for initial feature load checks (validation, install status).
+ * @property processUriUseCase Use case for parsing URIs into feature routes or navigation keys.
+ * @property runPostInstallStepsUseCase Use case for executing steps after installation (ServiceLoader, interceptors, screen fetch).
+ * @property monitorInstallationUseCase Use case for monitoring Play Core installation progress and events.
+ * @property handleErrorUseCase Use case for processing errors and determining appropriate UI/state updates.
+ */
 @HiltViewModel
 class DFComponentViewModel @Inject constructor(
     private val stateStore: DFComponentStateStore,
@@ -84,48 +127,62 @@ class DFComponentViewModel @Inject constructor(
         private const val TAG = "DFComponentViewModel"
     }
 
-    // --- State Flows ---
-    private val _currentFeature = MutableStateFlow<String?>(null)
-    private val _uiState = MutableStateFlow<DFComponentState>(DFComponentState.Loading)
-    val uiState: StateFlow<DFComponentState> = _uiState.asStateFlow()
+    // --- State Management ---
 
-    // --- ADD StateFlow for the Dynamic Screen Composable ---
+    /** Tracks the name of the feature currently being processed (loaded or installed). */
+    private val _currentFeature = MutableStateFlow<String?>(null)
+
+    /** The primary UI state flow observed by the Compose UI. Defaults to Loading. */
+    private val _uiState = MutableStateFlow<DFComponentState>(DFComponentState.Loading)
+    val uiState: StateFlow<DFComponentState> = _uiState.asStateFlow() // Exposed as immutable StateFlow
+
+    /** StateFlow holding the dynamically loaded Composable function for the feature's screen. Null initially or when cleared. */
     private val _dynamicScreenContent =
         MutableStateFlow<(@Composable (NavController, List<String>) -> Unit)?>(null)
     val dynamicScreenContent: StateFlow<(@Composable (NavController, List<String>) -> Unit)?> =
-        _dynamicScreenContent.asStateFlow()
+        _dynamicScreenContent.asStateFlow() // Exposed as immutable StateFlow
+
+    /** Set to keep track of features successfully processed (post-install steps completed) within this ViewModel instance lifecycle. */
     private val processedFeatures = mutableSetOf<String>()
+
+    /** Holds the parameters associated with the current feature load intent. */
     private val _currentParams = MutableStateFlow<List<String>>(emptyList())
 
+    /** Job tracking the currently active installation monitoring coroutine. Allows cancellation. */
     private var currentInstallJob: Job? = null
 
-    // --- ViewModel internal state for pending confirmation ---
+    /** Internal state to hold data needed for a pending user confirmation dialog (prevents multiple concurrent dialogs). */
     private var pendingConfirmationData: ConfirmationEventData? = null
-    // ---
 
-    // --- SharedFlow for Events (e.g., show confirmation dialog) ---
+    /** SharedFlow for emitting one-time events to the UI (e.g., trigger confirmation dialog). */
     private val _eventFlow = MutableSharedFlow<ConfirmationEventData>(
-        replay = 0, // No replay needed
-        extraBufferCapacity = 1, // Buffer one event
-        onBufferOverflow = BufferOverflow.DROP_OLDEST // Drop oldest if buffer full
+        replay = 0, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val eventFlow: SharedFlow<ConfirmationEventData> = _eventFlow.asSharedFlow()
-    // ---
+    val eventFlow: SharedFlow<ConfirmationEventData> = _eventFlow.asSharedFlow() // Exposed as immutable SharedFlow
 
-    // --- ADD Function to clear dynamic content when navigating away or reloading ---
+    /**
+     * Clears the dynamically loaded screen content. Called when navigating away
+     * from the dynamic feature's screen or starting a new feature load.
+     */
     fun clearDynamicContent() {
-        Log.e(TAG, "Clearing dynamic screen content.")
+        Log.d(TAG, "Clearing dynamic screen content.")
         _dynamicScreenContent.value = null
-        // Also reset UI state if appropriate, e.g., back to loading for next feature?
-        // _uiState.value = DFComponentState.Loading // Optional: Reset UI state
+        // Optionally reset UI state here if needed, e.g., back to Loading
+        // _uiState.value = DFComponentState.Loading
     }
-    // ---
 
+    /**
+     * Main entry point for processing intents dispatched from the UI.
+     * Delegates to specific handler functions based on the intent type.
+     * Clears dynamic content when starting a new/different feature load or retry.
+     *
+     * @param intent The [DFComponentIntent] received from the UI.
+     */
     fun processIntent(intent: DFComponentIntent) {
         Log.d(TAG, "Processing intent: $intent")
-        // Clear previous dynamic content when starting a new feature load explicitly
+
+        // Clear dynamic content preemptively if loading a new feature or retrying
         if (intent is DFComponentIntent.LoadFeature) {
-            // Only clear if it's a *different* feature or retry of same feature
             if (_currentFeature.value != intent.feature || _dynamicScreenContent.value == null) {
                 clearDynamicContent()
             }
@@ -133,50 +190,45 @@ class DFComponentViewModel @Inject constructor(
             clearDynamicContent()
         }
 
+        // Route intent to appropriate handler
         when (intent) {
             is DFComponentIntent.LoadFeature -> {
-                _currentParams.value = intent.params
-                loadFeature(intent.feature)
+                _currentParams.value = intent.params // Store parameters
+                loadFeature(intent.feature)        // Handle feature loading
             }
-
-            is DFComponentIntent.Retry -> {
-                retryLastFeature()
-            }
-
-            is DFComponentIntent.UserConfirmationResult -> handleUserConfirmationResult(intent.feature,intent.confirmed)
-            is DFComponentIntent.ProcessUri -> handleProcessUriIntent(intent.uri)
+            is DFComponentIntent.Retry -> retryLastFeature() // Handle retry
+            is DFComponentIntent.UserConfirmationResult -> handleUserConfirmationResult(intent.feature, intent.confirmed) // Handle confirmation result
+            is DFComponentIntent.ProcessUri -> handleProcessUriIntent(intent.uri) // Handle URI processing
         }
     }
 
-    private fun handleProcessUriIntent(uri: String?) { // Accept nullable URI
+    /**
+     * Handles the [DFComponentIntent.ProcessUri] intent.
+     * Uses [processUriUseCase] to parse the URI and then dispatches a
+     * [DFComponentIntent.LoadFeature] or handles invalid URI errors.
+     *
+     * @param uri The raw URI string from the intent.
+     */
+    private fun handleProcessUriIntent(uri: String?) {
         Log.d(TAG, "Handling ProcessUri intent with URI: $uri")
 
-        when (val result = processUriUseCase(uri)) { // Call the use case
+        when (val result = processUriUseCase(uri)) { // Invoke the use case
             is DFProcessUriResult.FeatureRoute -> {
-                Log.i(
-                    TAG,
-                    "ProcessUriUseCase result: FeatureRoute. Dispatching LoadFeature intent."
-                )
-                // Dispatch LoadFeature intent with extracted details
+                Log.i(TAG, "URI parsed as FeatureRoute: ${result.name}. Dispatching LoadFeature.")
+                // Trigger feature loading with parsed details
                 processIntent(DFComponentIntent.LoadFeature(result.name, result.params))
             }
-
             is DFProcessUriResult.NavigationRoute -> {
-                Log.w(
-                    TAG,
-                    "ProcessUriUseCase result: NavigationRoute (${result.key}). Requires specific navigation implementation."
-                )
+                // Placeholder: Current implementation treats navigation keys like feature routes.
+                // Needs specific handling if navigating to non-DF screens is required.
+                Log.w(TAG, "URI parsed as NavigationRoute: ${result.key}. Dispatching LoadFeature (needs specific impl).")
                 processIntent(DFComponentIntent.LoadFeature(result.key, result.params))
             }
-
             is DFProcessUriResult.InvalidUri -> {
-                Log.e(
-                    TAG,
-                    "ProcessUriUseCase result: InvalidUri. Dispatching Error intent. Reason: ${result.reason}"
-                )
-                // Directly call error handler
+                Log.e(TAG, "URI is invalid: ${result.reason}. Handling error.")
+                // Handle the invalid URI error state
                 handleErrorState(
-                    feature = null, // URI processing error might not have feature context yet
+                    feature = null, // Feature name might not be known yet
                     errorType = ErrorType.URI_INVALID,
                     message = "Invalid link/request: ${result.reason}"
                 )
@@ -184,134 +236,121 @@ class DFComponentViewModel @Inject constructor(
         }
     }
 
-
+    /**
+     * Executes the post-installation steps (ServiceLoader init, interceptors, screen fetch)
+     * using [runPostInstallStepsUseCase]. Updates the UI state to Success and populates
+     * `_dynamicScreenContent` on success, or handles errors on failure.
+     *
+     * @param feature The name of the feature for which to run post-install steps.
+     */
     private fun executePostInstallSteps(feature: String) {
-        viewModelScope.launch {
-            when (val result = runPostInstallStepsUseCase(feature)) {
+        viewModelScope.launch { // Launch in ViewModel's scope
+            Log.i(TAG, "Executing post-install steps for feature: $feature")
+            when (val result = runPostInstallStepsUseCase(feature)) { // Invoke use case
                 is DFRunPostInstallResult.Success -> {
-                    Log.i(
-                        TAG,
-                        "Post-install steps successful for $feature. Screen lambda received."
-                    )
-                    _dynamicScreenContent.value =
-                        result.screen // Update the dynamic content StateFlow
-
-                    // Update the UI state to Success, indicating the feature is ready to be displayed
-                    // Ensure we have the correct InstallationState (should be Installed here)
+                    Log.i(TAG, "Post-install steps successful for $feature. Screen lambda received.")
+                    // Store the fetched Composable lambda
+                    _dynamicScreenContent.value = result.screen
+                    // Update UI to Success state, confirming readiness
                     val currentInstallState = stateStore.getInstallationState(feature)
                     _uiState.value = DFComponentState.Success(
                         feature = feature,
-                        // Use the known state, default to Installed if somehow unknown
+                        // Ensure state is 'Installed' or use fallback
                         featureInstallationState = if (currentInstallState is DFInstallationState.Installed) currentInstallState else DFInstallationState.Installed,
-                        params = _currentParams.value
+                        params = _currentParams.value // Include parameters
                     )
-                    processedFeatures.add(feature) // Mark as successfully processed
+                    processedFeatures.add(feature) // Mark feature as fully processed for this session
                 }
-
                 is DFRunPostInstallResult.Failure -> {
-                    Log.e(
-                        TAG,
-                        "Post-install steps failed for $feature at step ${result.step}: ${result.message}",
-                        result.cause
-                    )
-                    // Map the failure step/message to an appropriate ErrorType and call handleErrorState
+                    Log.e(TAG, "Post-install steps failed for $feature at step ${result.step}: ${result.message}", result.cause)
+                    // Map the failure step to an ErrorType and handle the error state
                     val errorType = when (result.step) {
                         Step.SERVICE_LOADER_INITIALIZATION -> ErrorType.SERVICE_LOADER
                         Step.POST_INSTALL_INTERCEPTORS -> ErrorType.POST_INSTALL_INTERCEPTOR
-                        Step.FETCH_DYNAMIC_SCREEN -> ErrorType.SERVICE_LOADER // Or a more specific UI_LOAD_ERROR?
+                        Step.FETCH_DYNAMIC_SCREEN -> ErrorType.SERVICE_LOADER // Or specific UI error
                     }
                     handleErrorState(
                         feature = feature,
                         errorType = errorType,
                         message = result.message,
-                        // Pass DFErrorCode if available from cause, otherwise null
-                        dfErrorCode = null // Or potentially map from result.cause if possible
+                        dfErrorCode = null // Potentially extract from result.cause if relevant
                     )
                 }
             }
         }
     }
 
+    /**
+     * Handles the [DFComponentIntent.LoadFeature] intent.
+     * Manages job cancellation for concurrent requests, checks if the feature is already
+     * processed, and delegates the core loading logic to [loadFeatureUseCase].
+     * Based on the use case result, either proceeds to post-install steps or initiates
+     * installation monitoring.
+     *
+     * @param feature The name of the feature to load.
+     */
     private fun loadFeature(feature: String) {
-        Log.d(TAG, "Processing loadFeature intent for: $feature")
+        Log.d(TAG, "Handling loadFeature intent for: $feature")
 
-        // --- Start: Checks handled by ViewModel Orchestration ---
-        // Skip if feature is already processed successfully in this session
-        // Note: 'processedFeatures' helps avoid re-running post-install steps if the
-        // user navigates back and forth quickly *within the same ViewModel instance*.
-        // The LoadFeatureUseCase itself just checks current installation status.
+        // --- ViewModel Orchestration Checks ---
+        // Avoid redundant processing if already successfully loaded in this session
         if (processedFeatures.contains(feature) && uiState.value is DFComponentState.Success) {
-            Log.d(
-                TAG,
-                "Skipping loadFeature for already processed feature in this session: $feature"
-            )
-            // Ensure the dynamic content is available if it was cleared
+            Log.d(TAG, "Skipping loadFeature for already processed feature: $feature")
+            // If content was cleared, re-run post-install steps to fetch it again
             if (_dynamicScreenContent.value == null) {
-                Log.w(
-                    TAG,
-                    "Feature '$feature' already processed, but dynamic content is null. Re-running post-steps to fetch."
-                )
-                executePostInstallSteps(feature) // Re-fetch content if needed
+                Log.w(TAG, "Feature '$feature' processed, but content missing. Re-running post-steps.")
+                executePostInstallSteps(feature)
             }
             return
         }
-        // Handle potential ongoing job for a *different* feature
-        if (_currentFeature.value != feature) {
+
+        // Cancel any ongoing job if a *different* feature is requested
+        if (_currentFeature.value != feature && currentInstallJob != null) {
             currentInstallJob?.cancel(CancellationException("New feature load requested: $feature"))
             currentInstallJob = null
             Log.i(TAG, "Cancelled previous job for feature: ${_currentFeature.value}")
-            pendingConfirmationData = null // Clear confirmation state if feature changes
-            // Clear previous dynamic content when loading a new feature explicitly
-            clearDynamicContent() // Ensure this is called when feature *changes*
-        } else {
-            // If it's the same feature, the existing job might handle it,
-            // or maybe we intend to restart? Current logic restarts via new job launch below.
-            Log.d(
-                TAG,
-                "loadFeature called for the same feature: $feature. Existing job will be replaced."
-            )
+            pendingConfirmationData = null // Clear confirmation state for old feature
+            clearDynamicContent()          // Clear old dynamic content
+        } else if (_currentFeature.value == feature) {
+            Log.d(TAG, "loadFeature called for the same feature: $feature. Existing job will be replaced if running.")
+            // Cancel current job even if it's for the same feature to ensure a fresh start
+            currentInstallJob?.cancel(CancellationException("Restarting load for feature: $feature"))
+            currentInstallJob = null
         }
-        // --- End: Checks handled by ViewModel Orchestration ---
-        _currentFeature.value = feature
+        // --- End Orchestration Checks ---
 
+        _currentFeature.value = feature // Update the current feature being processed
+
+        // Launch a new coroutine for the loading/installation process
         currentInstallJob = viewModelScope.launch {
-            // --- Start: Logic now delegated to LoadFeatureUseCase ---
-            // The use case handles: input validation, storing last attempt, checking install status
+            // Delegate initial checks and decision making to the LoadFeatureUseCase
             when (val loadResult = loadFeatureUseCase(feature)) {
                 is DFLoadFeatureResult.ProceedToPostInstall -> {
                     Log.i(TAG, "Feature '$feature' is installed. Proceeding to post-install steps.")
+                    // Feature already installed, run post-install logic
                     executePostInstallSteps(feature)
                 }
-
                 is DFLoadFeatureResult.ProceedToInstallationMonitoring -> {
-                    Log.i(
-                        TAG,
-                        "Feature '$feature' not installed. Proceeding to installation monitoring."
-                    )
-                    initiateInstallation(feature) // initiateInstallation now focuses only on monitoring setup
+                    Log.i(TAG, "Feature '$feature' not installed. Initiating installation monitoring.")
+                    // Feature needs installation, start monitoring
+                    initiateInstallation(feature)
                 }
-
                 is DFLoadFeatureResult.Failure -> {
                     Log.w(TAG, "LoadFeatureUseCase failed for '$feature': ${loadResult.message}")
+                    // Handle errors reported by the initial load check
                     handleErrorState(
-                        feature = feature, // Pass feature context if available
+                        feature = feature,
                         errorType = loadResult.errorType,
                         message = loadResult.message
                     )
                 }
             }
-            // --- End: Logic now delegated to LoadFeatureUseCase ---
 
-            // Handle potential errors during the *launch* itself (less likely now)
+            // Optional: Handle unexpected errors during the launch itself
             currentInstallJob?.invokeOnCompletion { throwable ->
                 if (throwable != null && throwable !is CancellationException) {
-                    Log.e(
-                        TAG,
-                        "Unhandled error during LoadFeature job launch/completion for $feature",
-                        throwable
-                    )
-                    // Ensure error state is set if the job fails unexpectedly outside handled paths
-                    if (_uiState.value !is DFComponentState.Error) {
+                    Log.e(TAG, "Unhandled error during loadFeature job for $feature", throwable)
+                    if (_uiState.value !is DFComponentState.Error) { // Avoid overriding specific errors
                         handleErrorState(
                             feature,
                             ErrorType.UNKNOWN,
@@ -323,147 +362,155 @@ class DFComponentViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Initiates the installation monitoring process using [monitorInstallationUseCase].
+     * Collects events from the use case flow to update UI state, handle confirmation
+     * requests (emitting events to the Activity), trigger post-install steps, or
+     * handle terminal failure/cancellation states.
+     *
+     * @param feature The name of the feature to install and monitor.
+     */
     private fun initiateInstallation(feature: String) {
-
-        // Clear any lingering confirmation state from previous attempts for this feature
+        // Ensure any previous confirmation state for this feature is cleared
         pendingConfirmationData = null
 
-        // Directly launch the monitoring coroutine
+        // Launch the monitoring coroutine, replacing any existing job
         currentInstallJob = viewModelScope.launch {
             try {
-                Log.i(TAG, "Starting monitoring via MonitorInstallationUseCase for: $feature")
-                _uiState.value = DFComponentState.Loading // Show loading
+                Log.i(TAG, "Starting installation monitoring for: $feature")
+                _uiState.value = DFComponentState.Loading // Set initial UI state to Loading
 
-                // Collect events from the MonitorInstallationUseCase
+                // Collect events emitted by the MonitorInstallationUseCase flow
                 monitorInstallationUseCase(feature, _currentParams.value)
                     .collect { event ->
-                        // Event handling logic remains the same...
-                        Log.d(
-                            TAG,
-                            "Received event from MonitorInstallationUseCase: ${event::class.simpleName}"
-                        )
+                        Log.d(TAG, "Received MonitorInstallation event: ${event::class.simpleName}")
                         when (event) {
+                            // Update UI state based on installation progress
                             is DFInstallationMonitoringEvent.UpdateUiState -> {
-                                if (_uiState.value != event.state) {
+                                if (_uiState.value != event.state) { // Avoid redundant updates
                                     _uiState.value = event.state
                                 }
                             }
-
+                            // Store confirmation data and emit event to Activity to show dialog
                             is DFInstallationMonitoringEvent.StorePendingConfirmation -> {
-                                // Only store and emit if we aren't already pending for this feature
+                                // Only store/emit if not already pending for this feature
                                 if (pendingConfirmationData?.feature != feature) {
-                                    val confirmationData =
-                                        ConfirmationEventData(feature, event.sessionState)
-                                    pendingConfirmationData = confirmationData
-                                    _eventFlow.tryEmit(confirmationData) // Use tryEmit for SharedFlow
-                                    Log.i(
-                                        TAG,
-                                        "Stored pendingConfirmationData and emitted event for $feature, Session ID: ${event.sessionState.sessionId()}"
-                                    )
+                                    val confirmationData = ConfirmationEventData(feature, event.sessionState)
+                                    pendingConfirmationData = confirmationData // Store locally
+                                    _eventFlow.tryEmit(confirmationData)    // Emit event to Activity
+                                    Log.i(TAG, "Stored pending confirmation and emitted event for $feature.")
                                 } else {
-                                    Log.w(
-                                        TAG,
-                                        "Already pending confirmation for $feature, skipping store/emit."
-                                    )
+                                    Log.w(TAG, "Already pending confirmation for $feature, skipping store/emit.")
                                 }
                             }
-
+                            // Clear pending confirmation data (dialog no longer needed or resolved)
                             is DFInstallationMonitoringEvent.ClearPendingConfirmation -> {
                                 if (pendingConfirmationData != null) {
                                     pendingConfirmationData = null
-                                    Log.i(
-                                        TAG,
-                                        "Cleared pendingConfirmationData for $feature due to Clear event"
-                                    )
+                                    Log.i(TAG, "Cleared pending confirmation for $feature.")
                                 }
                             }
-
+                            // Installation successful, trigger post-install steps
                             is DFInstallationMonitoringEvent.TriggerPostInstallSteps -> {
-                                pendingConfirmationData = null // Ensure cleared on success
+                                pendingConfirmationData = null // Clear confirmation state on success
                                 executePostInstallSteps(feature)
                             }
-
+                            // Installation failed terminally
                             is DFInstallationMonitoringEvent.InstallationFailedTerminal -> {
-                                Log.e(
-                                    TAG,
-                                    "Installation monitoring terminated with failure for $feature: ${event.errorState}"
-                                )
-                                pendingConfirmationData = null // Clear on failure
-                                // UI state already updated via UpdateUiState event
+                                Log.e(TAG, "Installation failed terminally for $feature: ${event.errorState.message}")
+                                pendingConfirmationData = null // Clear confirmation state on failure
+                                // UI state should have been updated via UpdateUiState already
                             }
-
+                            // Installation cancelled terminally
                             is DFInstallationMonitoringEvent.InstallationCancelledTerminal -> {
-                                Log.w(
-                                    TAG,
-                                    "Installation monitoring terminated with cancellation for $feature"
-                                )
-                                pendingConfirmationData = null // Clear on cancellation
-                                // UI state already updated via UpdateUiState event
+                                Log.w(TAG, "Installation cancelled terminally for $feature.")
+                                pendingConfirmationData = null // Clear confirmation state on cancellation
+                                // UI state should have been updated via UpdateUiState already
                             }
                         }
                     }
-
             } catch (e: CancellationException) {
-                Log.i(TAG, "Installation monitoring coroutine cancelled for $feature: ${e.message}")
-                // Handle cancellation UI state...
-                pendingConfirmationData = null // Ensure cleared on cancellation
-                // Optionally set UI state to cancelled or error if needed
+                // Handle cancellation of the monitoring job itself
+                Log.i(TAG, "Installation monitoring cancelled for $feature: ${e.message}")
+                pendingConfirmationData = null // Clear confirmation state
+                // Optionally update UI state to reflect cancellation if not already handled
             } catch (e: Exception) {
-                Log.e(TAG, "Error launching/running installation monitoring for $feature", e)
+                // Handle unexpected errors during monitoring
+                Log.e(TAG, "Error during installation monitoring for $feature", e)
                 handleErrorState(
                     feature = feature,
                     errorType = ErrorType.UNKNOWN,
                     message = "Failed during installation monitoring: ${e.message}"
                 )
-                pendingConfirmationData = null // Ensure cleared on unexpected error
+                pendingConfirmationData = null // Clear confirmation state
             }
         }
     }
 
+    /**
+     * Handles the [DFComponentIntent.Retry] intent.
+     * Retrieves the last attempted feature from [stateStore] and calls [loadFeature]
+     * to restart the loading process for it.
+     */
     private fun retryLastFeature() {
         viewModelScope.launch {
-            val lastFeature = stateStore.getLastAttemptedFeature()
+            val lastFeature = stateStore.getLastAttemptedFeature() // Get last feature URI/name
             if (lastFeature != null) {
-                Log.e(TAG, "Retrying feature: $lastFeature")
-                loadFeature(lastFeature) // This will cancel existing job and restart
+                Log.i(TAG, "Retrying last attempted feature: $lastFeature")
+                loadFeature(lastFeature) // Re-initiate loadFeature, which handles job cancellation etc.
             } else {
                 Log.e(TAG, "No last attempted feature found to retry.")
-                _uiState.value =
-                    DFComponentState.Error("No feature to retry", ErrorType.VALIDATION, null)
+                _uiState.value = DFComponentState.Error("No feature to retry", ErrorType.VALIDATION, null)
             }
         }
     }
 
-    // Called AFTER the Activity receives the result from the Play confirmation dialog
+    /**
+     * Handles the [DFComponentIntent.UserConfirmationResult] intent, received after the
+     * user interacts with the Play Core confirmation dialog shown by the Activity.
+     * Clears the pending confirmation state and updates the UI based on whether the
+     * user confirmed or declined.
+     *
+     * @param feature The feature for which the confirmation result was received.
+     * @param confirmed True if the user confirmed, false otherwise.
+     */
     private fun handleUserConfirmationResult(feature: String, confirmed: Boolean) {
         Log.i(TAG, "User confirmation result received for feature: $feature, Confirmed: $confirmed")
 
-        // Clear the locally stored pending state regardless of outcome
-        // Play Core listener will handle the actual installation progress
+        // Clear the locally tracked pending state - the listener will observe actual progress.
         pendingConfirmationData = null
 
         if (confirmed) {
-            // User confirmed. Installation should resume via Play Core listener.
-            // Optionally update UI back to a generic Loading state if it was RequiresConfirmation
+            // User confirmed. Installation should resume automatically via Play Core's listener.
+            // Optionally revert UI from RequiresConfirmation back to Loading.
             if (_uiState.value is DFComponentState.RequiresConfirmation) {
                 _uiState.value = DFComponentState.Loading
             }
-            Log.d(TAG, "User confirmed, installation expected to resume.")
+            Log.d(TAG, "User confirmed, installation should resume.")
         } else {
-            // User declined or cancelled the dialog.
-            Log.w(TAG, "User declined or cancelled confirmation for $feature.")
-            // Set UI state to an appropriate error/cancelled state
+            // User declined or cancelled.
+            Log.w(TAG, "User declined/cancelled confirmation for $feature.")
+            // Set UI state to reflect cancellation (treated as an error).
             handleErrorState(
                 feature = feature,
-                errorType = ErrorType.INSTALLATION, // Or a specific 'USER_CANCELLED' type
+                errorType = ErrorType.INSTALLATION, // Or a more specific 'USER_CANCELLED' type
                 message = "User cancelled installation for $feature.",
-                dfErrorCode = DFErrorCode.NO_ERROR // Or a custom code for user cancel
+                dfErrorCode = DFErrorCode.NO_ERROR // Or a specific code for user cancellation if defined
             )
         }
     }
 
-
-
+    /**
+     * Centralized error handling function.
+     * Clears pending confirmation state, uses [handleErrorUseCase] to process the error
+     * details and determine the final UI error state and any necessary persistent state updates.
+     * Updates the state store and the ViewModel's UI state accordingly.
+     *
+     * @param feature The feature specifically associated with this error, if known.
+     * @param errorType The category of the error.
+     * @param message The error message for the UI.
+     * @param dfErrorCode Optional specific Play Core error code.
+     */
     private fun handleErrorState(
         feature: String?,
         errorType: ErrorType,
@@ -472,33 +519,27 @@ class DFComponentViewModel @Inject constructor(
     ) {
         Log.e(TAG, "Handling error: feature=${feature ?: "N/A"}, type=$errorType, code=$dfErrorCode, msg=$message")
 
-        // --- Clear pending confirmation on any error ---
+        // Clear any pending confirmation if an error occurs for that feature (or any feature if context unknown)
         if (pendingConfirmationData != null && (feature == null || pendingConfirmationData?.feature == feature)) {
             Log.w(TAG, "Clearing pending confirmation data due to error.")
             pendingConfirmationData = null
         }
-        // ---
 
-        // 1. Call the use case to get the processed error states
+        // 1. Delegate error processing to the HandleErrorUseCase
         val errorResult = handleErrorUseCase.invoke(
-            feature = feature,
-            currentFeature = _currentFeature.value, // Pass the ViewModel's current context
+            feature = feature,                   // Specific feature related to this error event
+            currentFeature = _currentFeature.value, // Overall feature context in ViewModel
             errorType = errorType,
             message = message,
             dfErrorCode = dfErrorCode
         )
 
-        // 2. Perform side effect: Update central store if needed
+        // 2. Update persistent state store if the use case determined it necessary
         errorResult.installationStateToStore?.let { stateToStore ->
-            // The use case determined the feature context was clear for this error
-            // Use the feature name determined by the use case within uiErrorState
-            val featureToUpdate = errorResult.uiErrorState.feature
+            val featureToUpdate = errorResult.uiErrorState.feature // Use feature name from processed result
             if (featureToUpdate != null && featureToUpdate != "unknown") {
-                viewModelScope.launch { // Ensure storage access is on appropriate scope/dispatcher if needed
-                    Log.d(
-                        TAG,
-                        "Updating state store for feature '$featureToUpdate' to: $stateToStore"
-                    )
+                viewModelScope.launch { // Use appropriate scope/dispatcher if needed
+                    Log.d(TAG, "Updating state store for '$featureToUpdate' to: $stateToStore")
                     stateStore.setInstallationState(featureToUpdate, stateToStore)
                 }
             } else {
@@ -506,12 +547,10 @@ class DFComponentViewModel @Inject constructor(
             }
         }
 
-        // 4. Perform side effect: Update UI state (ViewModel internal state)
-        if (_uiState.value != errorResult.uiErrorState) {
+        // 3. Update the ViewModel's UI state flow
+        if (_uiState.value != errorResult.uiErrorState) { // Avoid redundant updates
             _uiState.value = errorResult.uiErrorState
-            Log.d(TAG, "Updated UI state to: ${errorResult.uiErrorState}")
+            Log.d(TAG, "Updated UI state to Error: ${errorResult.uiErrorState.message}")
         }
     }
-
-
 }
