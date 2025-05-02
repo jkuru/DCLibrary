@@ -2,6 +2,7 @@ package com.kuru.featureflow.component.register
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +26,8 @@ import javax.inject.Singleton
 @Singleton
 class ComponentRegistryData @Inject constructor() {
     // Internal mutable map storing dynamic feature configurations and their screen Composables.
-    private val registry: MutableMap<DFComponentConfig, @Composable (NavController, List<String>) -> Unit> = mutableMapOf()
+    private val registry: ConcurrentHashMap<DFComponentConfig, @Composable (NavController, List<String>) -> Unit> = ConcurrentHashMap()
+
 
     /**
      * Registers a dynamic feature's configuration and its associated screen Composable.
