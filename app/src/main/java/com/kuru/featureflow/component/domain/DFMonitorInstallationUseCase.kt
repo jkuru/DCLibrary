@@ -38,7 +38,7 @@ class DFMonitorInstallationUseCase @Inject constructor(
      * @param feature The name of the feature for context.
      * @return True if checks pass, false otherwise.
      */
-    private suspend fun runGenericPreInstallChecks(feature: String): Boolean {
+    private fun runGenericPreInstallChecks(feature: String): Boolean {
         Log.i(TAG, "Running generic pre-install checks for $feature")
         // TODO: Implement actual checks (network availability, storage space, etc.)
         // Example:
@@ -56,7 +56,7 @@ class DFMonitorInstallationUseCase @Inject constructor(
      * @param currentParams The parameters associated with the feature load attempt.
      * @return A Flow emitting [DFInstallationMonitoringEvent]s for the ViewModel to handle.
      */
-    suspend operator fun invoke(
+    operator fun invoke(
         feature: String,
         currentParams: List<String>
     ): Flow<DFInstallationMonitoringEvent> = flow {
@@ -209,6 +209,10 @@ class DFMonitorInstallationUseCase @Inject constructor(
                     emit(DFInstallationMonitoringEvent.UpdateUiState(errorState)) // Update UI first
                     emit(DFInstallationMonitoringEvent.InstallationFailedTerminal(errorState)) // Then emit terminal event
                 }
+            }
+            .collect { event ->
+                Log.d(TAG, "Emitting DFInstallationMonitoringEvent for $feature: $event")
+                emit(event) // Emit to outer flow
             }
     }
 }
