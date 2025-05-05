@@ -146,7 +146,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.kuru"
                 artifactId = "featureflow"
-                version = "5.9.3"
+                version = "6.0.7"
             }
         }
     }

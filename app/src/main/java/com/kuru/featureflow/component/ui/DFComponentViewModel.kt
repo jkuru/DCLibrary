@@ -2,6 +2,9 @@ package com.kuru.featureflow.component.ui
 
 import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
@@ -160,6 +163,9 @@ class DFComponentViewModel @Inject constructor(
     )
     val eventFlow: SharedFlow<ConfirmationEventData> = _eventFlow.asSharedFlow() // Exposed as immutable SharedFlow
 
+    private var currentlyProcessingUri: String? by mutableStateOf(null)
+    private var isProcessingJobActive: Boolean by mutableStateOf(false)
+
     /**
      * Clears the dynamically loaded screen content. Called when navigating away
      * from the dynamic feature's screen or starting a new feature load.
@@ -211,7 +217,24 @@ class DFComponentViewModel @Inject constructor(
      */
     private fun handleProcessUriIntent(uri: String?) {
         Log.d(TAG, "Handling ProcessUri intent with URI: $uri")
+        if (uri == null) {handleErrorState(
+            feature = null,
+            errorType = ErrorType.URI_INVALID,
+            message = "Received null URI."
+        ) }
+      // --- Duplicate Intent Mitigation Logic ---
+        val isActive = currentInstallJob?.isActive == true ||
+                uiState.value is DFComponentState.Loading ||
+                uiState.value is DFComponentState.RequiresConfirmation
 
+        if (uri == currentlyProcessingUri && isActive) {
+            Log.w(TAG, "Ignoring duplicate ProcessUri intent for already processing URI: $uri")
+            return // Ignore duplicate for active process
+        }
+        // If different URI, or same URI but not active, proceed:
+        currentlyProcessingUri = uri // Store the URI we are now processing
+
+        // ---- Duplicate Intent  End Mitigation ---
         when (val result = processUriUseCase(uri)) { // Invoke the use case
             is DFProcessUriResult.FeatureRoute -> {
                 Log.i(TAG, "URI parsed as FeatureRoute: ${result.name}. Dispatching LoadFeature.")
@@ -304,23 +327,25 @@ class DFComponentViewModel @Inject constructor(
             return
         }
 
-        // Cancel any ongoing job if a *different* feature is requested
-        if (_currentFeature.value != feature && currentInstallJob != null) {
+        // Check if a job is already running *for a different feature*
+        if (_currentFeature.value != null && _currentFeature.value != feature && currentInstallJob?.isActive == true) {
+            Log.w(TAG, "Cancelling previous job ${currentInstallJob} for feature '${_currentFeature.value}' due to new request for '$feature'")
             currentInstallJob?.cancel(CancellationException("New feature load requested: $feature"))
             currentInstallJob = null
-            Log.i(TAG, "Cancelled previous job for feature: ${_currentFeature.value}")
             pendingConfirmationData = null // Clear confirmation state for old feature
             clearDynamicContent()          // Clear old dynamic content
-        } else if (_currentFeature.value == feature) {
-            Log.d(TAG, "loadFeature called for the same feature: $feature. Existing job will be replaced if running.")
-            // Cancel current job even if it's for the same feature to ensure a fresh start
-            currentInstallJob?.cancel(CancellationException("Restarting load for feature: $feature"))
-            currentInstallJob = null
+            _currentFeature.value = null   // Reset current feature since the old one is cancelled
+        } else if (_currentFeature.value == feature && currentInstallJob?.isActive == true) {
+            // If it's the SAME feature and a job is ALREADY active, just log and return.
+            // Let the existing job finish. The duplicate intent should have been caught earlier
+            // in handleProcessUriIntent, but this adds safety.
+            Log.w(TAG, "loadFeature called for the same feature '$feature' which already has an active job. Ignoring redundant load request.")
+            return // Exit without cancelling or restarting
         }
-        // --- End Orchestration Checks ---
+
 
         _currentFeature.value = feature // Update the current feature being processed
-
+        Log.d(TAG, "loadFeature: Launching new job for feature '$feature'")
         // Launch a new coroutine for the loading/installation process
         currentInstallJob = viewModelScope.launch {
             // Delegate initial checks and decision making to the LoadFeatureUseCase
@@ -346,20 +371,27 @@ class DFComponentViewModel @Inject constructor(
                 }
             }
 
-            // Optional: Handle unexpected errors during the launch itself
+            // Add completion logging for the job launched here
             currentInstallJob?.invokeOnCompletion { throwable ->
-                if (throwable != null && throwable !is CancellationException) {
-                    Log.e(TAG, "Unhandled error during loadFeature job for $feature", throwable)
+                if (throwable is CancellationException) {
+                    Log.i(TAG, "loadFeature: Job for '$feature' cancelled. Reason: ${throwable.message}")
+                } else if (throwable != null) {
+                    Log.e(TAG, "loadFeature: Job for '$feature' completed with error", throwable)
                     if (_uiState.value !is DFComponentState.Error) { // Avoid overriding specific errors
-                        handleErrorState(
-                            feature,
-                            ErrorType.UNKNOWN,
-                            "Failed to load feature: ${throwable.message}"
-                        )
+                        handleErrorState(feature, ErrorType.UNKNOWN,"Job failed: ${throwable.message}")
                     }
+                } else {
+                    Log.i(TAG, "loadFeature: Job for '$feature' completed successfully.")
+                }
+                // Reset current feature only if this *specific* job instance completed for it
+                if (_currentFeature.value == feature && currentInstallJob == this.coroutineContext[Job]) {
+                    // Consider if resetting _currentFeature here is correct,
+                    // maybe only on error/cancel? Success path might rely on it staying set.
+                    // _currentFeature.value = null // Optional reset
                 }
             }
         }
+        Log.d(TAG, "loadFeature: Assigned job $currentInstallJob for '$feature'")
     }
 
     /**
@@ -381,7 +413,7 @@ class DFComponentViewModel @Inject constructor(
                 _uiState.value = DFComponentState.Loading // Set initial UI state to Loading
 
                 // Collect events emitted by the MonitorInstallationUseCase flow
-                monitorInstallationUseCase(feature, _currentParams.value)
+                monitorInstallationUseCase.invoke(feature, _currentParams.value)
                     .collect { event ->
                         Log.d(TAG, "Received MonitorInstallation event: ${event::class.simpleName}")
                         when (event) {

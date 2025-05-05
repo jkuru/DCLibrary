@@ -45,7 +45,7 @@ class DFLoadFeatureUseCase @Inject constructor(
     private val stateStore: DFComponentStateStore
 ) {
     companion object {
-        private const val TAG = "LoadFeatureUseCase"
+        private const val TAG = "DFLoadFeatureUseCase"
     }
 
     /**
@@ -79,6 +79,7 @@ class DFLoadFeatureUseCase @Inject constructor(
 
         // Step 3: Check Installation Status
         return try {
+            Log.d(TAG,"Feature '$feature' installer.isComponentInstalled(feature) going to be called ")
             val isInstalled = installer.isComponentInstalled(feature)
             Log.d(TAG,"Feature '$feature' installed status: $isInstalled")
             if (isInstalled) {

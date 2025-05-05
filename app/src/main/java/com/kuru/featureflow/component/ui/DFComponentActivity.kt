@@ -235,6 +235,10 @@ class DFComponentActivity : ComponentActivity() {
      * @param intent The Intent received by the activity.
      */
     private fun handleIntent(intent: Intent?) {
+        Log.d(TAG, "onNewIntent triggered at ${System.currentTimeMillis()} for instance ${this.hashCode()}")
+        Log.d(TAG, "  Intent Action: ${intent?.action}")
+        Log.d(TAG, "  Intent Data: ${intent?.dataString}")
+        Log.d(TAG, "  Intent Extras: ${intent?.extras}")
         if (intent == null) {
             Log.w(TAG, "handleIntent received a null intent.")
             return
@@ -257,7 +261,7 @@ class DFComponentActivity : ComponentActivity() {
         // --- ViewModel Interaction ---
         // Send the extracted URI to the ViewModel for parsing and initiating the feature load process.
         Log.d(TAG, "Dispatching ProcessUri intent to ViewModel with URI: $uriString")
-        viewModel.processIntent(DFComponentIntent.ProcessUri(uriString))
+       viewModel.processIntent(DFComponentIntent.ProcessUri(uriString))
     }
 
     // --- User Confirmation Flow ---
