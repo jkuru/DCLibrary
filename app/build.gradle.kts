@@ -122,6 +122,9 @@ dependencies {
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test.v180)
+
 
     // Testing dependencies (Instrumentation Tests)
     androidTestImplementation(libs.androidx.junit)
@@ -137,6 +140,7 @@ dependencies {
     // Debug dependencies
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    testImplementation(kotlin("test"))
 }
 
 afterEvaluate {

@@ -13,9 +13,6 @@ import javax.inject.Singleton
 @Singleton
 class DFComponentUriRouteParser @Inject constructor() {
 
-    init {
-        Log.e(TAG, "DFComponentUriRouteParser Init")
-    }
     companion object {
         private const val  TAG = "DFUriParser"
         private const val BASE_PATH_PREFIX = "/chase/df/"

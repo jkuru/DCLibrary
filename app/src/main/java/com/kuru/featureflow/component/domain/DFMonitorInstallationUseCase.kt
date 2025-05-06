@@ -3,7 +3,6 @@ package com.kuru.featureflow.component.domain
 import android.util.Log
 import com.kuru.featureflow.component.googleplay.DFComponentInstaller
 import com.kuru.featureflow.component.state.DFComponentStateStore
-import com.kuru.featureflow.component.state.DFHandleInstallationStateUseCase
 import com.kuru.featureflow.component.state.DFInstallationState
 import com.kuru.featureflow.component.ui.DFComponentState
 import com.kuru.featureflow.component.ui.ErrorType

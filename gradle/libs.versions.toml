@@ -2,6 +2,7 @@
 [versions]
 agp = "8.5.0" # Updated to latest stable AGP version
 kotlin = "1.9.23"  # Updated to latest stable Kotlin version
+kotlinxCoroutinesTest = "1.8.0"
 ksp = "1.9.23-1.0.19"
 hilt = "2.51.1"
 composeBom = "2024.05.00"
@@ -18,6 +19,8 @@ material = "1.12.0"
 mockitoCore = "5.14.1"
 mockitoKotlin = "5.4.0"
 mockitoAndroid = "5.14.1" # Added for Android instrumentation tests
+mockk = "1.13.10"
+mockkVersion = "1.13.12"
 navigation = "2.8.3"
 datastore = "1.1.1"
 kotlinxCoroutines = "1.9.0"
@@ -34,6 +37,7 @@ hilt-android-testing = { group = "com.google.dagger", name = "hilt-android-testi
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.2.0" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidxCoreKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+kotlinx-coroutines-test-v180 = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -69,6 +73,7 @@ androidx-test-runner = { group = "androidx.test", name = "runner", version.ref =
 mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockitoCore" }
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockitoKotlin" }
 mockito-android = { group = "org.mockito", name = "mockito-android", version.ref = "mockitoAndroid" } # Added
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 feature-delivery-ktx = { group = "com.google.android.play", name = "feature-delivery-ktx", version.ref = "featureDeliveryKtx" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }

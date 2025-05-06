@@ -17,6 +17,8 @@ import com.kuru.featureflow.component.route.DFComponentRoute
 import com.kuru.featureflow.component.route.DFComponentUriRouteParser
 import com.kuru.featureflow.component.serviceloader.DFServiceLoader
 import com.kuru.featureflow.component.serviceloader.DFServiceLoaderManager
+import com.kuru.featureflow.component.serviceloader.DefaultServiceLoaderWrapper
+import com.kuru.featureflow.component.serviceloader.ServiceLoaderWrapper
 import com.kuru.featureflow.component.state.DFComponentStateStore
 import com.kuru.featureflow.component.state.DFComponentStateStoreImpl
 import dagger.Binds
@@ -59,6 +61,12 @@ object AppModule {
     @Singleton
     fun provideApplicationScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    @Provides
+    @Singleton
+    fun provideServiceLoaderWrapper(): ServiceLoaderWrapper {
+        return DefaultServiceLoaderWrapper()
+    }
 
 }
 

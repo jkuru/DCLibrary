@@ -1,6 +1,8 @@
-package com.kuru.featureflow.component.state
+package com.kuru.featureflow.component.domain
 
 
+import com.kuru.featureflow.component.state.DFErrorCode
+import com.kuru.featureflow.component.state.DFInstallationState
 import com.kuru.featureflow.component.ui.DFComponentState
 import com.kuru.featureflow.component.ui.ErrorType
 import javax.inject.Inject

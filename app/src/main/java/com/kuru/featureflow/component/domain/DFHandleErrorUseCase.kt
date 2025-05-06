@@ -1,7 +1,10 @@
-package com.kuru.featureflow.component.state
+package com.kuru.featureflow.component.domain
 
 
 import android.util.Log
+import com.kuru.featureflow.component.state.DFErrorCode
+import com.kuru.featureflow.component.state.DFErrorHandlingResult
+import com.kuru.featureflow.component.state.DFInstallationState
 import com.kuru.featureflow.component.ui.DFComponentState
 import com.kuru.featureflow.component.ui.ErrorType
 import javax.inject.Inject
@@ -25,7 +28,7 @@ class DFHandleErrorUseCase @Inject constructor() { // Inject dependencies if nee
      * @param errorType The category of the error.
      * @param message A descriptive error message for the UI.
      * @param dfErrorCode An optional specific installation error code, if applicable.
-     * @return An [DFErrorHandlingResult] containing the UI state and optional installation state update.
+     * @return An [com.kuru.featureflow.component.state.DFErrorHandlingResult] containing the UI state and optional installation state update.
      */
     operator fun invoke(
         feature: String?, // Feature specifically tied to this error occurrence

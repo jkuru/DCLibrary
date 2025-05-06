@@ -22,7 +22,7 @@ import com.kuru.featureflow.component.domain.Step
 // Import state management components
 import com.kuru.featureflow.component.state.DFComponentStateStore
 import com.kuru.featureflow.component.state.DFErrorCode
-import com.kuru.featureflow.component.state.DFHandleErrorUseCase
+import com.kuru.featureflow.component.domain.DFHandleErrorUseCase
 import com.kuru.featureflow.component.state.DFInstallationState
 // Hilt annotation for ViewModel injection
 import dagger.hilt.android.lifecycle.HiltViewModel

@@ -12,9 +12,6 @@ class DFComponentRegistryManager @Inject constructor(
     private val registryData: ComponentRegistryData
 ) : DFComponentRegistry {
 
-    init {
-        Log.e(TAG, "DFComponentRegistryManager Init")
-    }
     companion object {
         private const val TAG = "DFRegistryManager"
     }

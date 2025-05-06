@@ -7,11 +7,11 @@ import com.kuru.featureflow.component.register.DFComponentEntry
 import com.kuru.featureflow.component.register.DFComponentRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.ServiceLoader
 import javax.inject.Inject
 
 class DFServiceLoaderManager @Inject constructor(
     private val registry: DFComponentRegistry,
+    private val serviceLoaderWrapper: ServiceLoaderWrapper
 ) : DFServiceLoader {
 
     override suspend fun runServiceLoaderInitialization(
@@ -27,8 +27,7 @@ class DFServiceLoaderManager @Inject constructor(
                         "Running ServiceLoader initialization for feature: $feature on ${Thread.currentThread().name}"
                     )
                     val classLoader = context.classLoader
-                    val serviceLoader =
-                        ServiceLoader.load(DFComponentEntry::class.java, classLoader)
+                    val serviceLoader = serviceLoaderWrapper.loadDFComponentEntry(DFComponentEntry::class.java, classLoader)
                     // Use iterator explicitly to check if any entries were found at all
                     val iterator = serviceLoader.iterator()
                     if (!iterator.hasNext()) {

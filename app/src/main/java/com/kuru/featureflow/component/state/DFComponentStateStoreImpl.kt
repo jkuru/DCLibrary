@@ -24,7 +24,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 // Define DataStore instance via extension property
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "featureflow_settings")
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "featureflow_settings")
 
 @Singleton
 class DFComponentStateStoreImpl @Inject constructor(
@@ -32,9 +32,6 @@ class DFComponentStateStoreImpl @Inject constructor(
     private val externalScope: CoroutineScope
 ) : DFComponentStateStore {
 
-    init {
-        Log.e(TAG, "DFComponentStateStoreImpl Init")
-    }
 
     companion object {
         private const val TAG = "DFComponentStateStoreImpl"
