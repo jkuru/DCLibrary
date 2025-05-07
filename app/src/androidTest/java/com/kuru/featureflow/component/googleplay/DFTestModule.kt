@@ -2,7 +2,6 @@ package com.kuru.featureflow.component.googleplay
 
 import android.content.Context
 import com.google.android.play.core.splitinstall.SplitInstallManager
-import com.kuru.featureflow.component.register.DFComponentRegistry
 import com.kuru.featureflow.component.state.DFStateStore
 import dagger.Module
 import dagger.Provides
@@ -30,11 +29,6 @@ object TestModule {
         return Mockito.mock(Context::class.java)
     }
 
-    @Provides
-    @Singleton
-    fun provideDFComponentRegistry(): DFComponentRegistry {
-        return Mockito.mock(DFComponentRegistry::class.java)
-    }
 
     @Provides
     @Singleton
@@ -42,9 +36,4 @@ object TestModule {
         return Mockito.mock(DFStateStore::class.java)
     }
 
-    @Provides
-    @Singleton
-    fun provideDFComponentInstaller(): DFComponentInstaller {
-        return Mockito.mock(DFComponentInstaller::class.java)
-    }
 }

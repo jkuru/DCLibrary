@@ -91,7 +91,8 @@ sealed class DFComponentIntent {
     object Retry : DFComponentIntent()
 
     /** Intent reporting the result of the user confirmation dialog shown by the Activity. */
-    data class UserConfirmationResult(val feature: String, val confirmed: Boolean) : DFComponentIntent()
+    data class UserConfirmationResult(val feature: String, val confirmed: Boolean) :
+        DFComponentIntent()
 
     /** Intent to process a URI, typically from a deep link or initial activity intent. */
     data class ProcessUri(val uri: String) : DFComponentIntent()
@@ -135,7 +136,8 @@ class DFComponentViewModel @Inject constructor(
 
     /** The primary UI state flow observed by the Compose UI. Defaults to Loading. */
     private val _uiState = MutableStateFlow<DFComponentState>(DFComponentState.Loading)
-    val uiState: StateFlow<DFComponentState> = _uiState.asStateFlow() // Exposed as immutable StateFlow
+    val uiState: StateFlow<DFComponentState> =
+        _uiState.asStateFlow() // Exposed as immutable StateFlow
 
     /** StateFlow holding the dynamically loaded Composable function for the feature's screen. Null initially or when cleared. */
     private val _dynamicScreenContent =
@@ -159,7 +161,8 @@ class DFComponentViewModel @Inject constructor(
     private val _eventFlow = MutableSharedFlow<ConfirmationEventData>(
         replay = 0, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val eventFlow: SharedFlow<ConfirmationEventData> = _eventFlow.asSharedFlow() // Exposed as immutable SharedFlow
+    val eventFlow: SharedFlow<ConfirmationEventData> =
+        _eventFlow.asSharedFlow() // Exposed as immutable SharedFlow
 
     private var currentlyProcessingUri: String? by mutableStateOf(null)
     private var isProcessingJobActive: Boolean by mutableStateOf(false)
@@ -200,8 +203,12 @@ class DFComponentViewModel @Inject constructor(
                 _currentParams.value = intent.params // Store parameters
                 loadFeature(intent.feature)        // Handle feature loading
             }
+
             is DFComponentIntent.Retry -> retryLastFeature() // Handle retry
-            is DFComponentIntent.UserConfirmationResult -> handleUserConfirmationResult(intent.feature, intent.confirmed) // Handle confirmation result
+            is DFComponentIntent.UserConfirmationResult -> handleUserConfirmationResult(
+                intent.feature,
+                intent.confirmed
+            ) // Handle confirmation result
             is DFComponentIntent.ProcessUri -> handleProcessUriIntent(intent.uri) // Handle URI processing
         }
     }
@@ -215,12 +222,15 @@ class DFComponentViewModel @Inject constructor(
      */
     private fun handleProcessUriIntent(uri: String?) {
         Log.d(TAG, "Handling ProcessUri intent with URI: $uri")
-        if (uri == null) {handleErrorState(
-            feature = null,
-            errorType = ErrorType.URI_INVALID,
-            message = "Received null URI."
-        ) }
-      // --- Duplicate Intent Mitigation Logic ---
+        if (uri == null) {
+            handleErrorState(
+                feature = null,
+                errorType = ErrorType.URI_INVALID,
+                message = "Received null URI."
+            )
+            return
+        }
+        // --- Duplicate Intent Mitigation Logic ---
         val isActive = currentInstallJob?.isActive == true ||
                 uiState.value is DFComponentState.Loading ||
                 uiState.value is DFComponentState.RequiresConfirmation
@@ -239,12 +249,17 @@ class DFComponentViewModel @Inject constructor(
                 // Trigger feature loading with parsed details
                 processIntent(DFComponentIntent.LoadFeature(result.name, result.params))
             }
+
             is DFProcessUriState.NavigationRoute -> {
                 // Placeholder: Current implementation treats navigation keys like feature routes.
                 // Needs specific handling if navigating to non-DF screens is required.
-                Log.w(TAG, "URI parsed as NavigationRoute: ${result.key}. Dispatching LoadFeature (needs specific impl).")
+                Log.w(
+                    TAG,
+                    "URI parsed as NavigationRoute: ${result.key}. Dispatching LoadFeature (needs specific impl)."
+                )
                 processIntent(DFComponentIntent.LoadFeature(result.key, result.params))
             }
+
             is DFProcessUriState.InvalidUri -> {
                 Log.e(TAG, "URI is invalid: ${result.reason}. Handling error.")
                 // Handle the invalid URI error state
@@ -269,7 +284,10 @@ class DFComponentViewModel @Inject constructor(
             Log.i(TAG, "Executing post-install steps for feature: $feature")
             when (val result = runPostInstallStepsUseCase(feature)) { // Invoke use case
                 is DFFeatureSetupResult.Success -> {
-                    Log.i(TAG, "Post-install steps successful for $feature. Screen lambda received.")
+                    Log.i(
+                        TAG,
+                        "Post-install steps successful for $feature. Screen lambda received."
+                    )
                     // Store the fetched Composable lambda
                     _dynamicScreenContent.value = result.screen
                     // Update UI to Success state, confirming readiness
@@ -282,8 +300,13 @@ class DFComponentViewModel @Inject constructor(
                     )
                     processedFeatures.add(feature) // Mark feature as fully processed for this session
                 }
+
                 is DFFeatureSetupResult.Failure -> {
-                    Log.e(TAG, "Post-install steps failed for $feature at step ${result.featureSetupStep}: ${result.message}", result.cause)
+                    Log.e(
+                        TAG,
+                        "Post-install steps failed for $feature at step ${result.featureSetupStep}: ${result.message}",
+                        result.cause
+                    )
                     // Map the failure step to an ErrorType and handle the error state
                     val errorType = when (result.featureSetupStep) {
                         FeatureSetupStep.SERVICE_LOADER_INITIALIZATION -> ErrorType.SERVICE_LOADER
@@ -319,7 +342,10 @@ class DFComponentViewModel @Inject constructor(
             Log.d(TAG, "Skipping loadFeature for already processed feature: $feature")
             // If content was cleared, re-run post-install steps to fetch it again
             if (_dynamicScreenContent.value == null) {
-                Log.w(TAG, "Feature '$feature' processed, but content missing. Re-running post-steps.")
+                Log.w(
+                    TAG,
+                    "Feature '$feature' processed, but content missing. Re-running post-steps."
+                )
                 executePostInstallSteps(feature)
             }
             return
@@ -327,7 +353,10 @@ class DFComponentViewModel @Inject constructor(
 
         // Check if a job is already running *for a different feature*
         if (_currentFeature.value != null && _currentFeature.value != feature && currentInstallJob?.isActive == true) {
-            Log.w(TAG, "Cancelling previous job ${currentInstallJob} for feature '${_currentFeature.value}' due to new request for '$feature'")
+            Log.w(
+                TAG,
+                "Cancelling previous job ${currentInstallJob} for feature '${_currentFeature.value}' due to new request for '$feature'"
+            )
             currentInstallJob?.cancel(CancellationException("New feature load requested: $feature"))
             currentInstallJob = null
             pendingConfirmationData = null // Clear confirmation state for old feature
@@ -337,7 +366,10 @@ class DFComponentViewModel @Inject constructor(
             // If it's the SAME feature and a job is ALREADY active, just log and return.
             // Let the existing job finish. The duplicate intent should have been caught earlier
             // in handleProcessUriIntent, but this adds safety.
-            Log.w(TAG, "loadFeature called for the same feature '$feature' which already has an active job. Ignoring redundant load request.")
+            Log.w(
+                TAG,
+                "loadFeature called for the same feature '$feature' which already has an active job. Ignoring redundant load request."
+            )
             return // Exit without cancelling or restarting
         }
 
@@ -353,11 +385,16 @@ class DFComponentViewModel @Inject constructor(
                     // Feature already installed, run post-install logic
                     executePostInstallSteps(feature)
                 }
+
                 is DFLoadFeatureResult.ProceedToInstallationMonitoring -> {
-                    Log.i(TAG, "Feature '$feature' not installed. Initiating installation monitoring.")
+                    Log.i(
+                        TAG,
+                        "Feature '$feature' not installed. Initiating installation monitoring."
+                    )
                     // Feature needs installation, start monitoring
                     initiateInstallation(feature)
                 }
+
                 is DFLoadFeatureResult.Failure -> {
                     Log.w(TAG, "LoadFeatureUseCase failed for '$feature': ${loadResult.message}")
                     // Handle errors reported by the initial load check
@@ -372,11 +409,18 @@ class DFComponentViewModel @Inject constructor(
             // Add completion logging for the job launched here
             currentInstallJob?.invokeOnCompletion { throwable ->
                 if (throwable is CancellationException) {
-                    Log.i(TAG, "loadFeature: Job for '$feature' cancelled. Reason: ${throwable.message}")
+                    Log.i(
+                        TAG,
+                        "loadFeature: Job for '$feature' cancelled. Reason: ${throwable.message}"
+                    )
                 } else if (throwable != null) {
                     Log.e(TAG, "loadFeature: Job for '$feature' completed with error", throwable)
                     if (_uiState.value !is DFComponentState.Error) { // Avoid overriding specific errors
-                        handleErrorState(feature, ErrorType.UNKNOWN,"Job failed: ${throwable.message}")
+                        handleErrorState(
+                            feature,
+                            ErrorType.UNKNOWN,
+                            "Job failed: ${throwable.message}"
+                        )
                     }
                 } else {
                     Log.i(TAG, "loadFeature: Job for '$feature' completed successfully.")
@@ -425,12 +469,19 @@ class DFComponentViewModel @Inject constructor(
                             is DFInstallationMonitoringState.StorePendingConfirmation -> {
                                 // Only store/emit if not already pending for this feature
                                 if (pendingConfirmationData?.feature != feature) {
-                                    val confirmationData = ConfirmationEventData(feature, event.sessionState)
+                                    val confirmationData =
+                                        ConfirmationEventData(feature, event.sessionState)
                                     pendingConfirmationData = confirmationData // Store locally
                                     _eventFlow.tryEmit(confirmationData)    // Emit event to Activity
-                                    Log.i(TAG, "Stored pending confirmation and emitted event for $feature.")
+                                    Log.i(
+                                        TAG,
+                                        "Stored pending confirmation and emitted event for $feature."
+                                    )
                                 } else {
-                                    Log.w(TAG, "Already pending confirmation for $feature, skipping store/emit.")
+                                    Log.w(
+                                        TAG,
+                                        "Already pending confirmation for $feature, skipping store/emit."
+                                    )
                                 }
                             }
                             // Clear pending confirmation data (dialog no longer needed or resolved)
@@ -442,19 +493,25 @@ class DFComponentViewModel @Inject constructor(
                             }
                             // Installation successful, trigger post-install steps
                             is DFInstallationMonitoringState.TriggerPostInstallSteps -> {
-                                pendingConfirmationData = null // Clear confirmation state on success
+                                pendingConfirmationData =
+                                    null // Clear confirmation state on success
                                 executePostInstallSteps(feature)
                             }
                             // Installation failed terminally
                             is DFInstallationMonitoringState.InstallationFailedTerminal -> {
-                                Log.e(TAG, "Installation failed terminally for $feature: ${event.errorState.message}")
-                                pendingConfirmationData = null // Clear confirmation state on failure
+                                Log.e(
+                                    TAG,
+                                    "Installation failed terminally for $feature: ${event.errorState.message}"
+                                )
+                                pendingConfirmationData =
+                                    null // Clear confirmation state on failure
                                 // UI state should have been updated via UpdateUiState already
                             }
                             // Installation cancelled terminally
                             is DFInstallationMonitoringState.InstallationCancelledTerminal -> {
                                 Log.w(TAG, "Installation cancelled terminally for $feature.")
-                                pendingConfirmationData = null // Clear confirmation state on cancellation
+                                pendingConfirmationData =
+                                    null // Clear confirmation state on cancellation
                                 // UI state should have been updated via UpdateUiState already
                             }
                         }
@@ -490,7 +547,8 @@ class DFComponentViewModel @Inject constructor(
                 loadFeature(lastFeature) // Re-initiate loadFeature, which handles job cancellation etc.
             } else {
                 Log.e(TAG, "No last attempted feature found to retry.")
-                _uiState.value = DFComponentState.Error("No feature to retry", ErrorType.VALIDATION, null)
+                _uiState.value =
+                    DFComponentState.Error("No feature to retry", ErrorType.VALIDATION, null)
             }
         }
     }
@@ -547,7 +605,10 @@ class DFComponentViewModel @Inject constructor(
         message: String,
         dfErrorCode: DFErrorCode? = null
     ) {
-        Log.e(TAG, "Handling error: feature=${feature ?: "N/A"}, type=$errorType, code=$dfErrorCode, msg=$message")
+        Log.e(
+            TAG,
+            "Handling error: feature=${feature ?: "N/A"}, type=$errorType, code=$dfErrorCode, msg=$message"
+        )
 
         // Clear any pending confirmation if an error occurs for that feature (or any feature if context unknown)
         if (pendingConfirmationData != null && (feature == null || pendingConfirmationData?.feature == feature)) {
@@ -566,7 +627,8 @@ class DFComponentViewModel @Inject constructor(
 
         // 2. Update persistent state store if the use case determined it necessary
         errorResult.installationStateToStore?.let { stateToStore ->
-            val featureToUpdate = errorResult.uiErrorState.feature // Use feature name from processed result
+            val featureToUpdate =
+                errorResult.uiErrorState.feature // Use feature name from processed result
             if (featureToUpdate != null && featureToUpdate != "unknown") {
                 viewModelScope.launch { // Use appropriate scope/dispatcher if needed
                     Log.d(TAG, "Updating state store for '$featureToUpdate' to: $stateToStore")

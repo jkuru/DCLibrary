@@ -64,7 +64,7 @@ class DFComponentActivity : ComponentActivity() {
      * shut down then this Bundle contains the data it most recently supplied in
      * onSaveInstanceState(Bundle). Note: Otherwise it is null.
      */
-    override fun onCreate(savedInstanceState: Bundle?) {
+    public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge() // Configure UI display behavior.
 
@@ -220,7 +220,7 @@ class DFComponentActivity : ComponentActivity() {
      *
      * @param intent The new intent that was started for the activity.
      */
-    override fun onNewIntent(intent: Intent) {
+    public override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent) // Update the activity's intent
         // --- ViewModel Interaction ---

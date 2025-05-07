@@ -1,6 +1,7 @@
 
 [versions]
 agp = "8.5.0" # Updated to latest stable AGP version
+coreTesting = "2.2.0"
 kotlin = "1.9.23"  # Updated to latest stable Kotlin version
 kotlinxCoroutinesTest = "1.8.0"
 ksp = "1.9.23-1.0.19"
@@ -31,6 +32,7 @@ androidxTestRunner = "1.6.2"
 
 
 [libraries]
+androidx-core-testing = { module = "androidx.arch.core:core-testing", version.ref = "coreTesting" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 hilt-android-testing = { group = "com.google.dagger", name = "hilt-android-testing", version.ref = "hilt" }

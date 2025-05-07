@@ -124,6 +124,21 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test.v180)
+    // AndroidJUnit4 runner for Android testing
+    testImplementation (libs.androidx.junit)
+
+    // InstantTaskExecutorRule for LiveData testing
+    testImplementation (libs.androidx.core.ktx)
+
+    // Coroutines testing utilities
+    testImplementation (libs.kotlinx.coroutines.test)
+
+    // Additional dependencies for the provided test (e.g., Robolectric, MockK)
+    testImplementation (libs.robolectric)
+    testImplementation ("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+
+    // InstantTaskExecutorRule for LiveData testing
+    testImplementation ("androidx.arch.core:core-testing:2.2.0")
 
 
     // Testing dependencies (Instrumentation Tests)
