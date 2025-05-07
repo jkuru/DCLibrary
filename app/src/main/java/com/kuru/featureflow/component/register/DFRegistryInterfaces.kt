@@ -1,5 +1,7 @@
 package com.kuru.featureflow.component.register
 
+import android.content.Context
+import com.kuru.featureflow.component.domain.DFFeatureRegistryUseCase
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -24,7 +26,7 @@ import dagger.hilt.components.SingletonComponent
  * - **Hilt Management**: The [DFComponentRegistry] is bound as a singleton in the base module
  *   using Hilt's dependency injection, installed in the [SingletonComponent].
  * - **Application Context**: Dynamic modules, such as "plants", receive the application context
- *   (typically passed via [DFComponentEntry.initialize]). This context is used to access Hilt's
+ *   (typically passed via [DFRegistryComponentEntry.initialize]). This context is used to access Hilt's
  *   entry points.
  * - **EntryPointAccessors**: The dynamic module calls [EntryPointAccessors.fromApplication] with
  *   the application context and this interface ([DFRegistryEntryPoint]) to retrieve an instance
@@ -57,5 +59,28 @@ interface DFRegistryEntryPoint {
      *
      * @return The [DFComponentRegistry] singleton instance.
      */
-    fun getComponentRegistry(): DFComponentRegistry
+    fun getComponentRegistry(): DFFeatureRegistryUseCase
+}
+
+
+
+/**
+ * This will be implemented by the dynamic feature, this is entry point for dynamic feature
+ * the link using service loaders
+ * It will register DFComponentRegistry to DFComponentRegistryManager
+ * The Post Interceptors will be executed in framework
+ */
+interface DFRegistryComponentEntry {
+    /**
+     * Initializes the dynamic feature module with the application context.
+     *
+     * This method is the key entry point for a dynamic feature module after it’s installed.
+     * It’s called by the framework (via ServiceLoader) to allow the module to:
+     * - Perform setup tasks using the provided application context.
+     * - Register its configuration with the DFComponentRegistryManager.
+     * - Enable post-installation logic (like interceptors) to be executed by the framework.
+     *
+     * @param context The application context from the base module, used for initialization.
+     */
+    fun initialize(context: Context)
 }

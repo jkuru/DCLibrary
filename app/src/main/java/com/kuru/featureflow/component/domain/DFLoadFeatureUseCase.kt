@@ -2,8 +2,7 @@ package com.kuru.featureflow.component.domain
 
 
 import android.util.Log
-import com.kuru.featureflow.component.googleplay.DFComponentInstaller
-import com.kuru.featureflow.component.state.DFComponentStateStore
+import com.kuru.featureflow.component.state.DFStateStore
 import com.kuru.featureflow.component.ui.ErrorType // Assuming ErrorType enum is accessible
 import javax.inject.Inject
 
@@ -41,8 +40,8 @@ sealed class DFLoadFeatureResult {
  * (run post-install steps or monitor installation).
  */
 class DFLoadFeatureUseCase @Inject constructor(
-    private val installer: DFComponentInstaller,
-    private val stateStore: DFComponentStateStore
+    private val installer: DFFeatureInstaller,
+    private val stateStore: DFStateStore
 ) {
     companion object {
         private const val TAG = "DFLoadFeatureUseCase"
@@ -80,7 +79,7 @@ class DFLoadFeatureUseCase @Inject constructor(
         // Step 3: Check Installation Status
         return try {
             Log.d(TAG,"Feature '$feature' installer.isComponentInstalled(feature) going to be called ")
-            val isInstalled = installer.isComponentInstalled(feature)
+            val isInstalled = installer.isFeatureInstalled(feature)
             Log.d(TAG,"Feature '$feature' installed status: $isInstalled")
             if (isInstalled) {
                 DFLoadFeatureResult.ProceedToPostInstall

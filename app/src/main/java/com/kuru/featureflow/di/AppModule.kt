@@ -6,21 +6,12 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.android.play.core.splitinstall.SplitInstallManager
 import com.google.android.play.core.splitinstall.SplitInstallManagerFactory
-import com.kuru.featureflow.component.googleplay.DFComponentInstaller
-import com.kuru.featureflow.component.googleplay.DFComponentInstallerManager
-import com.kuru.featureflow.component.interceptor.DFInterceptor
-import com.kuru.featureflow.component.interceptor.DFInterceptorManager
-import com.kuru.featureflow.component.register.ComponentRegistryData
-import com.kuru.featureflow.component.register.DFComponentRegistry
-import com.kuru.featureflow.component.register.DFComponentRegistryManager
-import com.kuru.featureflow.component.route.DFComponentRoute
-import com.kuru.featureflow.component.route.DFComponentUriRouteParser
-import com.kuru.featureflow.component.serviceloader.DFServiceLoader
-import com.kuru.featureflow.component.serviceloader.DFServiceLoaderManager
-import com.kuru.featureflow.component.serviceloader.DefaultServiceLoaderWrapper
-import com.kuru.featureflow.component.serviceloader.ServiceLoaderWrapper
-import com.kuru.featureflow.component.state.DFComponentStateStore
-import com.kuru.featureflow.component.state.DFComponentStateStoreImpl
+import com.kuru.featureflow.component.domain.DFFeatureInstaller
+import com.kuru.featureflow.component.domain.DFInstallFeatureUseCase
+import com.kuru.featureflow.component.domain.DefaultServiceLoaderWrapper
+import com.kuru.featureflow.component.domain.ServiceLoaderWrapper
+import com.kuru.featureflow.component.state.DFStateStore
+import com.kuru.featureflow.component.state.DFStateStoreImpl
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -38,12 +29,6 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
-    @Provides
-    @Singleton
-    fun provideComponentRegistryData(): ComponentRegistryData {
-        return ComponentRegistryData()
-    }
 
     @Provides
     @Singleton
@@ -76,32 +61,14 @@ abstract class FrameworkBindingsModule {
 
     @Binds
     @Singleton
-    abstract fun bindDFComponentInstaller(
-        impl: DFComponentInstallerManager
-    ): DFComponentInstaller
+    abstract fun bindDFFeatureInstaller(
+        impl: DFInstallFeatureUseCase
+    ): DFFeatureInstaller
 
     @Binds
     @Singleton
     abstract fun bindDFComponentStateStore(
-        impl: DFComponentStateStoreImpl
-    ): DFComponentStateStore
-
-    @Binds
-    @Singleton
-    abstract fun bindDFComponentRegistry(
-        impl: DFComponentRegistryManager
-    ): DFComponentRegistry
-
-    @Binds
-    @Singleton
-    abstract fun bindDFInterceptorManager(
-        impl: DFInterceptorManager
-    ): DFInterceptor
-
-    @Binds
-    @Singleton
-    abstract fun bindDDFServiceLoader(
-        impl: DFServiceLoaderManager
-    ): DFServiceLoader
+        impl: DFStateStoreImpl
+    ): DFStateStore
 
 }

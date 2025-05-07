@@ -10,19 +10,18 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.google.android.play.core.splitinstall.SplitInstallSessionState
 // Import domain layer components used by the ViewModel
-import com.kuru.featureflow.component.domain.DFInstallationMonitoringEvent
+import com.kuru.featureflow.component.state.DFInstallationMonitoringState
 import com.kuru.featureflow.component.domain.DFLoadFeatureResult
 import com.kuru.featureflow.component.domain.DFLoadFeatureUseCase
-import com.kuru.featureflow.component.domain.DFMonitorInstallationUseCase
-import com.kuru.featureflow.component.domain.DFProcessUriResult
-import com.kuru.featureflow.component.domain.DFProcessUriUseCase
-import com.kuru.featureflow.component.domain.DFRunPostInstallResult
-import com.kuru.featureflow.component.domain.DFRunPostInstallStepsUseCase
-import com.kuru.featureflow.component.domain.Step
+import com.kuru.featureflow.component.domain.DFTrackFeatureInstallUseCase
+import com.kuru.featureflow.component.domain.DFProcessUriState
+import com.kuru.featureflow.component.domain.DFResolveFeatureRouteUseCase
+import com.kuru.featureflow.component.state.DFFeatureSetupResult
+import com.kuru.featureflow.component.domain.DFCompleteFeatureSetupUseCase
+import com.kuru.featureflow.component.state.FeatureSetupStep
 // Import state management components
-import com.kuru.featureflow.component.state.DFComponentStateStore
+import com.kuru.featureflow.component.state.DFStateStore
 import com.kuru.featureflow.component.state.DFErrorCode
-import com.kuru.featureflow.component.domain.DFHandleErrorUseCase
 import com.kuru.featureflow.component.state.DFInstallationState
 // Hilt annotation for ViewModel injection
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -118,12 +117,11 @@ data class ConfirmationEventData(val feature: String, val sessionState: SplitIns
  */
 @HiltViewModel
 class DFComponentViewModel @Inject constructor(
-    private val stateStore: DFComponentStateStore,
+    private val stateStore: DFStateStore,
     private val loadFeatureUseCase: DFLoadFeatureUseCase,
-    private val processUriUseCase: DFProcessUriUseCase,
-    private val runPostInstallStepsUseCase: DFRunPostInstallStepsUseCase,
-    private val monitorInstallationUseCase: DFMonitorInstallationUseCase,
-    private val handleErrorUseCase: DFHandleErrorUseCase
+    private val processUriUseCase: DFResolveFeatureRouteUseCase,
+    private val runPostInstallStepsUseCase: DFCompleteFeatureSetupUseCase,
+    private val monitorInstallationUseCase: DFTrackFeatureInstallUseCase
 ) : ViewModel() {
 
     companion object {
@@ -236,18 +234,18 @@ class DFComponentViewModel @Inject constructor(
 
         // ---- Duplicate Intent  End Mitigation ---
         when (val result = processUriUseCase(uri)) { // Invoke the use case
-            is DFProcessUriResult.FeatureRoute -> {
+            is DFProcessUriState.FeatureRoute -> {
                 Log.i(TAG, "URI parsed as FeatureRoute: ${result.name}. Dispatching LoadFeature.")
                 // Trigger feature loading with parsed details
                 processIntent(DFComponentIntent.LoadFeature(result.name, result.params))
             }
-            is DFProcessUriResult.NavigationRoute -> {
+            is DFProcessUriState.NavigationRoute -> {
                 // Placeholder: Current implementation treats navigation keys like feature routes.
                 // Needs specific handling if navigating to non-DF screens is required.
                 Log.w(TAG, "URI parsed as NavigationRoute: ${result.key}. Dispatching LoadFeature (needs specific impl).")
                 processIntent(DFComponentIntent.LoadFeature(result.key, result.params))
             }
-            is DFProcessUriResult.InvalidUri -> {
+            is DFProcessUriState.InvalidUri -> {
                 Log.e(TAG, "URI is invalid: ${result.reason}. Handling error.")
                 // Handle the invalid URI error state
                 handleErrorState(
@@ -270,7 +268,7 @@ class DFComponentViewModel @Inject constructor(
         viewModelScope.launch { // Launch in ViewModel's scope
             Log.i(TAG, "Executing post-install steps for feature: $feature")
             when (val result = runPostInstallStepsUseCase(feature)) { // Invoke use case
-                is DFRunPostInstallResult.Success -> {
+                is DFFeatureSetupResult.Success -> {
                     Log.i(TAG, "Post-install steps successful for $feature. Screen lambda received.")
                     // Store the fetched Composable lambda
                     _dynamicScreenContent.value = result.screen
@@ -284,13 +282,13 @@ class DFComponentViewModel @Inject constructor(
                     )
                     processedFeatures.add(feature) // Mark feature as fully processed for this session
                 }
-                is DFRunPostInstallResult.Failure -> {
-                    Log.e(TAG, "Post-install steps failed for $feature at step ${result.step}: ${result.message}", result.cause)
+                is DFFeatureSetupResult.Failure -> {
+                    Log.e(TAG, "Post-install steps failed for $feature at step ${result.featureSetupStep}: ${result.message}", result.cause)
                     // Map the failure step to an ErrorType and handle the error state
-                    val errorType = when (result.step) {
-                        Step.SERVICE_LOADER_INITIALIZATION -> ErrorType.SERVICE_LOADER
-                        Step.POST_INSTALL_INTERCEPTORS -> ErrorType.POST_INSTALL_INTERCEPTOR
-                        Step.FETCH_DYNAMIC_SCREEN -> ErrorType.SERVICE_LOADER // Or specific UI error
+                    val errorType = when (result.featureSetupStep) {
+                        FeatureSetupStep.SERVICE_LOADER_INITIALIZATION -> ErrorType.SERVICE_LOADER
+                        FeatureSetupStep.POST_INSTALL_INTERCEPTORS -> ErrorType.POST_INSTALL_INTERCEPTOR
+                        FeatureSetupStep.FETCH_DYNAMIC_SCREEN -> ErrorType.SERVICE_LOADER // Or specific UI error
                     }
                     handleErrorState(
                         feature = feature,
@@ -418,13 +416,13 @@ class DFComponentViewModel @Inject constructor(
                         Log.d(TAG, "Received MonitorInstallation event: ${event::class.simpleName}")
                         when (event) {
                             // Update UI state based on installation progress
-                            is DFInstallationMonitoringEvent.UpdateUiState -> {
+                            is DFInstallationMonitoringState.UpdateUiState -> {
                                 if (_uiState.value != event.state) { // Avoid redundant updates
                                     _uiState.value = event.state
                                 }
                             }
                             // Store confirmation data and emit event to Activity to show dialog
-                            is DFInstallationMonitoringEvent.StorePendingConfirmation -> {
+                            is DFInstallationMonitoringState.StorePendingConfirmation -> {
                                 // Only store/emit if not already pending for this feature
                                 if (pendingConfirmationData?.feature != feature) {
                                     val confirmationData = ConfirmationEventData(feature, event.sessionState)
@@ -436,25 +434,25 @@ class DFComponentViewModel @Inject constructor(
                                 }
                             }
                             // Clear pending confirmation data (dialog no longer needed or resolved)
-                            is DFInstallationMonitoringEvent.ClearPendingConfirmation -> {
+                            is DFInstallationMonitoringState.ClearPendingConfirmation -> {
                                 if (pendingConfirmationData != null) {
                                     pendingConfirmationData = null
                                     Log.i(TAG, "Cleared pending confirmation for $feature.")
                                 }
                             }
                             // Installation successful, trigger post-install steps
-                            is DFInstallationMonitoringEvent.TriggerPostInstallSteps -> {
+                            is DFInstallationMonitoringState.TriggerPostInstallSteps -> {
                                 pendingConfirmationData = null // Clear confirmation state on success
                                 executePostInstallSteps(feature)
                             }
                             // Installation failed terminally
-                            is DFInstallationMonitoringEvent.InstallationFailedTerminal -> {
+                            is DFInstallationMonitoringState.InstallationFailedTerminal -> {
                                 Log.e(TAG, "Installation failed terminally for $feature: ${event.errorState.message}")
                                 pendingConfirmationData = null // Clear confirmation state on failure
                                 // UI state should have been updated via UpdateUiState already
                             }
                             // Installation cancelled terminally
-                            is DFInstallationMonitoringEvent.InstallationCancelledTerminal -> {
+                            is DFInstallationMonitoringState.InstallationCancelledTerminal -> {
                                 Log.w(TAG, "Installation cancelled terminally for $feature.")
                                 pendingConfirmationData = null // Clear confirmation state on cancellation
                                 // UI state should have been updated via UpdateUiState already
@@ -558,7 +556,7 @@ class DFComponentViewModel @Inject constructor(
         }
 
         // 1. Delegate error processing to the HandleErrorUseCase
-        val errorResult = handleErrorUseCase.invoke(
+        val errorResult = monitorInstallationUseCase.handleError(
             feature = feature,                   // Specific feature related to this error event
             currentFeature = _currentFeature.value, // Overall feature context in ViewModel
             errorType = errorType,

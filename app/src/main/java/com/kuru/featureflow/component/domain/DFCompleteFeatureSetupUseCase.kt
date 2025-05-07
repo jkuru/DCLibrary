@@ -1,9 +1,9 @@
-package com.kuru.featureflow.component.domain 
+package com.kuru.featureflow.component.domain
 
 import android.content.Context
 import android.util.Log
-import com.kuru.featureflow.component.interceptor.DFInterceptor
-import com.kuru.featureflow.component.serviceloader.DFServiceLoader
+import com.kuru.featureflow.component.state.DFFeatureSetupResult
+import com.kuru.featureflow.component.state.FeatureSetupStep
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
@@ -13,24 +13,24 @@ import javax.inject.Inject
  * This includes ServiceLoader initialization, running post-install interceptors,
  * and fetching the dynamic screen Composable.
  */
-class DFRunPostInstallStepsUseCase @Inject constructor(
-    private val serviceLoader: DFServiceLoader,
-    private val interceptor: DFInterceptor,
-    @ApplicationContext private val context: Context // Inject ApplicationContext
+class DFCompleteFeatureSetupUseCase @Inject constructor(
+    private val serviceLoader: DFInitializeFeatureUseCase,
+    private val interceptors: DFHandleFeatureInterceptorsUseCase,
+    @ApplicationContext private val context: Context
 ) {
 
     companion object {
-        private const val TAG = "RunPostInstallUseCase"
+        private const val TAG = "DFCompleteFeatureSetupUseCase"
     }
 
     /**
      * Executes the post-installation steps for the given feature.
      *
      * @param feature The name of the feature module.
-     * @return A [DFRunPostInstallResult] indicating success (with the screen lambda)
+     * @return A [DFFeatureSetupResult] indicating success (with the screen lambda)
      * or failure (with details).
      */
-    suspend operator fun invoke(feature: String): DFRunPostInstallResult {
+    suspend operator fun invoke(feature: String): DFFeatureSetupResult {
         Log.i(TAG, "Running post-install steps for feature: $feature")
 
         // Step 1: Run ServiceLoader Initialization
@@ -39,8 +39,8 @@ class DFRunPostInstallStepsUseCase @Inject constructor(
             serviceLoader.runServiceLoaderInitialization(feature, context.applicationContext)
         } catch (e: Exception) {
             Log.e(TAG, "ServiceLoader initialization failed for $feature", e)
-            return DFRunPostInstallResult.Failure(
-                step = Step.SERVICE_LOADER_INITIALIZATION,
+            return DFFeatureSetupResult.Failure(
+                featureSetupStep = FeatureSetupStep.SERVICE_LOADER_INITIALIZATION,
                 message = "ServiceLoader initialization threw an exception for $feature.",
                 cause = e
             )
@@ -48,8 +48,8 @@ class DFRunPostInstallStepsUseCase @Inject constructor(
 
         if (!serviceLoaderSuccess) {
             Log.w(TAG, "ServiceLoader initialization reported failure for $feature.")
-            return DFRunPostInstallResult.Failure(
-                step = Step.SERVICE_LOADER_INITIALIZATION,
+            return DFFeatureSetupResult.Failure(
+                featureSetupStep = FeatureSetupStep.SERVICE_LOADER_INITIALIZATION,
                 message = "ServiceLoader initialization failed for $feature (returned false)."
             )
         }
@@ -58,11 +58,11 @@ class DFRunPostInstallStepsUseCase @Inject constructor(
         // Step 2: Run Post-Install Interceptors
         val interceptorSuccess = try {
             Log.d(TAG, "Running post-install interceptors for $feature...")
-            interceptor.runPostInstallInterceptors(feature)
+            interceptors.runPostInstallInterceptors(feature)
         } catch (e: Exception) {
             Log.e(TAG, "Post-install interceptors failed for $feature", e)
-            return DFRunPostInstallResult.Failure(
-                step = Step.POST_INSTALL_INTERCEPTORS,
+            return DFFeatureSetupResult.Failure(
+                featureSetupStep = FeatureSetupStep.POST_INSTALL_INTERCEPTORS,
                 message = "Post-install interceptors threw an exception for $feature.",
                 cause = e
             )
@@ -70,10 +70,8 @@ class DFRunPostInstallStepsUseCase @Inject constructor(
 
         if (!interceptorSuccess) {
             Log.w(TAG, "Post-install interceptors reported failure for $feature.")
-            // Note: DFInterceptorManager currently returns true even if config not found,
-            // but returns false if an interceptor task fails. Adjust message if needed.
-            return DFRunPostInstallResult.Failure(
-                step = Step.POST_INSTALL_INTERCEPTORS,
+            return DFFeatureSetupResult.Failure(
+                featureSetupStep = FeatureSetupStep.POST_INSTALL_INTERCEPTORS,
                 message = "One or more post-install interceptors failed for $feature."
             )
         }
@@ -82,11 +80,11 @@ class DFRunPostInstallStepsUseCase @Inject constructor(
         // Step 3: Fetch Dynamic Screen Lambda
         val screenLambda = try {
             Log.d(TAG, "Fetching dynamic screen lambda for $feature...")
-            interceptor.fetchAndSetDynamicScreen(feature)
+            interceptors.fetchDynamicScreen(feature)
         } catch (e: Exception) {
             Log.e(TAG, "Fetching dynamic screen lambda failed for $feature", e)
-            return DFRunPostInstallResult.Failure(
-                step = Step.FETCH_DYNAMIC_SCREEN,
+            return DFFeatureSetupResult.Failure(
+                featureSetupStep = FeatureSetupStep.FETCH_DYNAMIC_SCREEN,
                 message = "Fetching dynamic screen lambda threw an exception for $feature.",
                 cause = e
             )
@@ -94,11 +92,11 @@ class DFRunPostInstallStepsUseCase @Inject constructor(
 
         return if (screenLambda != null) {
             Log.i(TAG, "Successfully fetched dynamic screen lambda for $feature.")
-            DFRunPostInstallResult.Success(screenLambda)
+            DFFeatureSetupResult.Success(screenLambda)
         } else {
             Log.e(TAG, "Failed to fetch dynamic screen lambda for $feature (returned null).")
-            DFRunPostInstallResult.Failure(
-                step = Step.FETCH_DYNAMIC_SCREEN,
+            DFFeatureSetupResult.Failure(
+                featureSetupStep = FeatureSetupStep.FETCH_DYNAMIC_SCREEN,
                 message = "Could not retrieve the screen content for $feature after installation and interceptors."
             )
         }

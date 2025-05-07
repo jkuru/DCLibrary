@@ -3,7 +3,7 @@ package com.kuru.featureflow.component.googleplay
 import android.content.Context
 import com.google.android.play.core.splitinstall.SplitInstallManager
 import com.kuru.featureflow.component.register.DFComponentRegistry
-import com.kuru.featureflow.component.state.DFComponentStateStore
+import com.kuru.featureflow.component.state.DFStateStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -38,8 +38,8 @@ object TestModule {
 
     @Provides
     @Singleton
-    fun provideDFComponentStateStore(): DFComponentStateStore {
-        return Mockito.mock(DFComponentStateStore::class.java)
+    fun provideDFComponentStateStore(): DFStateStore {
+        return Mockito.mock(DFStateStore::class.java)
     }
 
     @Provides

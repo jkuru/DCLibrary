@@ -1,15 +1,15 @@
-package com.kuru.featureflow.component.route
+package com.kuru.featureflow.component.state
 
 /**
  * Data class representing a parsed route from a URI for dynamic feature navigation.
- * Used by [DFComponentUriRouteParser] to encapsulate route information and by
+ * Used by [com.kuru.featureflow.component.route.DFComponentUriRouteParser] to encapsulate route information and by
  * [DFComponentActivity] to determine navigation or feature loading actions.
  *
  * Supported URI examples:
  * - "chase/df/route/myfeature?param1=value1" → route = "myfeature", params = ["param1=value1"]
  * - "chase/df/navigation/key/myactivity" → navigationKey = "myactivity"
  */
-data class DFComponentRoute(
+data class DFFeatureRoute(
     /** The full URI path (e.g., "/chase/df/route/myfeature"). Retained for logging/debugging. */
     val path: String,
     /** The route name extracted from the URI (e.g., "myfeature"). Used for feature loading. */

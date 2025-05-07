@@ -11,7 +11,7 @@ import com.kuru.featureflow.component.ui.DFComponentState
  * @property installationStateToStore An optional DFInstallationState.Failed to be
  * stored in the state store if the feature context is known.
  */
-data class DFErrorHandlingResult(
+data class DFFeatureError(
     val uiErrorState: DFComponentState.Error,
     val installationStateToStore: DFInstallationState.Failed?
 )

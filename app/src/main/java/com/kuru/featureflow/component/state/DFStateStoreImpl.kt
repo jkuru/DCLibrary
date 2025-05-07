@@ -27,10 +27,10 @@ import javax.inject.Singleton
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "featureflow_settings")
 
 @Singleton
-class DFComponentStateStoreImpl @Inject constructor(
+class DFStateStoreImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val externalScope: CoroutineScope
-) : DFComponentStateStore {
+) : DFStateStore {
 
 
     companion object {
@@ -57,7 +57,7 @@ class DFComponentStateStoreImpl @Inject constructor(
 
     // Holds interceptor states (kept in-memory)
     private val _DF_interceptorStates =
-        MutableStateFlow<Map<String, DFInterceptorState>>(emptyMap())
+        MutableStateFlow<Map<String, DFFeatureInterceptorState>>(emptyMap())
 
 
     // --- Persistence Methods (Using DataStore) ---
@@ -108,13 +108,13 @@ class DFComponentStateStoreImpl @Inject constructor(
 
     // Returns the current interceptor state from the in-memory map
     // Note: Interceptor states are transient and tied to the current session, lost on app closure
-    override fun getInterceptorState(interceptorId: String): DFInterceptorState {
-        return _DF_interceptorStates.value[interceptorId] ?: DFInterceptorState.Inactive
+    override fun getInterceptorState(interceptorId: String): DFFeatureInterceptorState {
+        return _DF_interceptorStates.value[interceptorId] ?: DFFeatureInterceptorState.Inactive
     }
 
     // Updates the in-memory interceptor state and notifies observers
     // Purpose: Manages interceptor logic during the current installation process
-    override fun setInterceptorState(interceptorId: String, state: DFInterceptorState) {
+    override fun setInterceptorState(interceptorId: String, state: DFFeatureInterceptorState) {
         externalScope.launch {
             _DF_interceptorStates.value = _DF_interceptorStates.value.toMutableMap().apply {
                 this[interceptorId] = state
@@ -162,4 +162,19 @@ class DFComponentStateStoreImpl @Inject constructor(
     //   and decide to resume, retry, or notify the user.
     // - In-Memory State (StateFlow): Installation and interceptor states are lost on closure but can be
     //   recreated from SplitInstallManager's persisted installation progress, ensuring continuity.
+}
+
+interface DFStateStore {
+    // --- Persistence ---
+    suspend fun getLastAttemptedFeature(): String?
+    suspend fun setLastAttemptedFeature(uri: String)
+
+    // --- In-Memory State Management (Could also be persisted if needed) ---
+    fun getInstallationState(feature: String): DFInstallationState // Immediate value
+    fun setInstallationState(feature: String, state: DFInstallationState) // Update in-memory
+    fun getInstallationStateFlow(feature: String): StateFlow<DFInstallationState> // Observe in-memory
+
+    // Interceptor states (kept in-memory for this example)
+    fun getInterceptorState(interceptorId: String): DFFeatureInterceptorState
+    fun setInterceptorState(interceptorId: String, state: DFFeatureInterceptorState)
 }

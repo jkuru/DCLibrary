@@ -40,7 +40,7 @@ import com.google.android.play.core.splitinstall.SplitInstallSessionState
  * }
  * ```
  */
-data class DFInstallProgress(
+data class DFFeatureInstallProgress(
     val frameworkState: DFInstallationState,
     val playCoreState: SplitInstallSessionState? = null // Nullable, only set when relevant (e.g., RequiresConfirmation)
 )

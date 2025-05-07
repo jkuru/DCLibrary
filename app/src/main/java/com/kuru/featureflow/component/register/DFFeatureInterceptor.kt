@@ -37,7 +37,19 @@ package com.kuru.featureflow.component.register
  * }
  * ```
  */
-data class DFComponentInterceptor(
+
+/**
+ * Type alias for a task executed by an interceptor.
+ * Returns true for success, false for failure.
+ */
+typealias InterceptorTask = () -> Boolean
+
+/**
+ * Defines an interceptor for tasks before or after dynamic feature installation.
+ * @param preInstall True if the task runs before installation, false if after.
+ * @param task The task to execute, returning true for success, false for failure.
+ */
+data class DFFeatureInterceptor(
     val preInstall: Boolean,
-    val task: () -> Boolean
+    val task: InterceptorTask
 )

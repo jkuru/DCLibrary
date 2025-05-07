@@ -10,7 +10,7 @@ import com.google.android.play.core.splitinstall.SplitInstallSessionState
 import com.google.android.play.core.splitinstall.SplitInstallStateUpdatedListener
 import com.google.android.play.core.splitinstall.model.SplitInstallSessionStatus
 import com.kuru.featureflow.component.state.DFErrorCode
-import com.kuru.featureflow.component.state.DFInstallProgress
+import com.kuru.featureflow.component.state.DFFeatureInstallProgress
 import com.kuru.featureflow.component.state.DFInstallationState
 import com.kuru.featureflow.di.AppModule
 import com.kuru.featureflow.di.FrameworkBindingsModule
@@ -106,7 +106,7 @@ class DFComponentInstallerManagerTest {
     @Test
     fun installComponent_emitsInstalled_ifModuleAlreadyInstalled() = testScope.runTest {
         `when`(splitInstallManager.installedModules).thenReturn(setOf(testModuleName))
-        val collectedStates = mutableListOf<DFInstallProgress>()
+        val collectedStates = mutableListOf<DFFeatureInstallProgress>()
         installerManager.installComponent(testModuleName)
             .onEach { collectedStates.add(it) }
             .launchIn(this)
@@ -134,7 +134,7 @@ class DFComponentInstallerManagerTest {
 
         `when`(splitInstallManager.getSessionState(testSessionId)).thenReturn(Tasks.forResult(sessionStatePending))
 
-        val collectedStates = mutableListOf<DFInstallProgress>()
+        val collectedStates = mutableListOf<DFFeatureInstallProgress>()
 
         val job = installerManager.installComponent(testModuleName)
             .onEach {
@@ -188,7 +188,7 @@ class DFComponentInstallerManagerTest {
 
         `when`(splitInstallManager.getSessionState(testSessionId)).thenReturn(Tasks.forResult(sessionStatePending))
 
-        val collectedStates = mutableListOf<DFInstallProgress>()
+        val collectedStates = mutableListOf<DFFeatureInstallProgress>()
 
         val job = installerManager.installComponent(testModuleName)
             .onEach {
@@ -234,7 +234,7 @@ class DFComponentInstallerManagerTest {
 
         `when`(splitInstallManager.getSessionState(testSessionId)).thenReturn(Tasks.forResult(sessionStatePending))
 
-        val collectedStates = mutableListOf<DFInstallProgress>()
+        val collectedStates = mutableListOf<DFFeatureInstallProgress>()
 
         val job = installerManager.retryComponentInstall(testModuleName)
             .onEach {

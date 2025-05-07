@@ -32,26 +32,26 @@ package com.kuru.featureflow.component.state
  * }
  * ```
  */
-sealed class DFInterceptorState {
+sealed class DFFeatureInterceptorState {
     /**
      * The interceptor is currently executing its task.
      */
-    data object Active : DFInterceptorState()
+    data object Active : DFFeatureInterceptorState()
 
     /**
      * The interceptor is not active and has not been started.
      */
-    data object Inactive : DFInterceptorState()
+    data object Inactive : DFFeatureInterceptorState()
 
     /**
      * The interceptor has successfully completed its task.
      */
-    data object Completed : DFInterceptorState()
+    data object Completed : DFFeatureInterceptorState()
 
     /**
      * The interceptor has failed to complete its task.
      *
      * @param message A string describing the reason for the failure.
      */
-    data class Failed(val message: String) : DFInterceptorState()
+    data class Failed(val message: String) : DFFeatureInterceptorState()
 }
