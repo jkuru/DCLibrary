@@ -17,9 +17,10 @@ import kotlinx.coroutines.flow.transform
 import javax.inject.Inject
 
 /**
- * Use case responsible for monitoring the installation progress of a dynamic feature module.
- * It interacts with the installer, updates the persistent state store, and emits events
- * to the ViewModel to coordinate UI updates, confirmation dialogs, and post-installation steps.
+ * This use case monitors the installation progress of a dynamic feature module. It interacts with the installer,
+ * updates the persistent state store, and emits events to the ViewModel for UI updates,
+ * confirmation dialogs, and post-installation actions. It includes logic for handling errors
+ *  and mapping installation error codes to UI error types.
  */
 open class DFTrackFeatureInstallUseCase @Inject constructor(
     private val installer: DFFeatureInstaller,
@@ -64,6 +65,7 @@ open class DFTrackFeatureInstallUseCase @Inject constructor(
             DFErrorCode.SPLITCOMPAT_VERIFICATION_ERROR,
             DFErrorCode.SPLITCOMPAT_EMULATION_ERROR,
             DFErrorCode.DOWNLOAD_SIZE_EXCEEDED -> ErrorType.INSTALLATION
+
             DFErrorCode.INTERNAL_ERROR -> ErrorType.UNKNOWN
             DFErrorCode.NO_ERROR -> ErrorType.UNKNOWN
             DFErrorCode.UNKNOWN_ERROR -> ErrorType.UNKNOWN
@@ -104,10 +106,16 @@ open class DFTrackFeatureInstallUseCase @Inject constructor(
 
         // Determine if we should update the persistent installation state
         val installationStateToStore: DFInstallationState.Failed? = if (feature != null) {
-            Log.d(TAG, "Error associated with known feature '$feature'. Preparing Failed state to store.")
+            Log.d(
+                TAG,
+                "Error associated with known feature '$feature'. Preparing Failed state to store."
+            )
             DFInstallationState.Failed(finalErrorCode)
         } else {
-            Log.w(TAG, "Error not associated with a specific feature ('feature' param was null). Won't store Failed installation state.")
+            Log.w(
+                TAG,
+                "Error not associated with a specific feature ('feature' param was null). Won't store Failed installation state."
+            )
             null
         }
 
@@ -166,7 +174,11 @@ open class DFTrackFeatureInstallUseCase @Inject constructor(
                 try {
                     stateStore.setInstallationState(feature, frameworkState)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to update StateStore for $feature with state $frameworkState", e)
+                    Log.e(
+                        TAG,
+                        "Failed to update StateStore for $feature with state $frameworkState",
+                        e
+                    )
                 }
 
                 // Map to UI state
@@ -229,7 +241,10 @@ open class DFTrackFeatureInstallUseCase @Inject constructor(
                         wasConfirmationPending = true
                         Log.d(TAG, "Emitted StorePendingConfirmation for $feature")
                     } else {
-                        Log.e(TAG, "RequiresConfirmation state received for $feature but playCoreState is null!")
+                        Log.e(
+                            TAG,
+                            "RequiresConfirmation state received for $feature but playCoreState is null!"
+                        )
                         val errorResult = handleError(
                             feature = feature,
                             currentFeature = feature,
@@ -249,25 +264,40 @@ open class DFTrackFeatureInstallUseCase @Inject constructor(
                 } else if (wasConfirmationPending && frameworkState !is DFInstallationState.Pending) {
                     emit(DFInstallationMonitoringState.ClearPendingConfirmation)
                     wasConfirmationPending = false
-                    Log.d(TAG, "Emitted ClearPendingConfirmation for $feature as state is $frameworkState")
+                    Log.d(
+                        TAG,
+                        "Emitted ClearPendingConfirmation for $feature as state is $frameworkState"
+                    )
                 }
 
                 // Handle Terminal States
                 when (frameworkState) {
                     is DFInstallationState.Installed -> {
-                        Log.i(TAG, "Installation complete for $feature. Emitting TriggerPostInstallSteps.")
+                        Log.i(
+                            TAG,
+                            "Installation complete for $feature. Emitting TriggerPostInstallSteps."
+                        )
                         emit(DFInstallationMonitoringState.TriggerPostInstallSteps)
                     }
+
                     is DFInstallationState.Failed -> {
-                        Log.w(TAG, "Installation failed for $feature. Emitting InstallationFailedTerminal.")
+                        Log.w(
+                            TAG,
+                            "Installation failed for $feature. Emitting InstallationFailedTerminal."
+                        )
                         if (uiState is DFComponentState.Error) {
                             emit(DFInstallationMonitoringState.InstallationFailedTerminal(uiState))
                         }
                     }
+
                     is DFInstallationState.Canceled -> {
-                        Log.w(TAG, "Installation cancelled for $feature. Emitting InstallationCancelledTerminal.")
+                        Log.w(
+                            TAG,
+                            "Installation cancelled for $feature. Emitting InstallationCancelledTerminal."
+                        )
                         emit(DFInstallationMonitoringState.InstallationCancelledTerminal)
                     }
+
                     else -> {}
                 }
             }

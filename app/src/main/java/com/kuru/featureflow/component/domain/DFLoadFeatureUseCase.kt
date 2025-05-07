@@ -34,10 +34,9 @@ sealed class DFLoadFeatureResult {
 }
 
 /**
- * Use case responsible for the initial steps of loading a feature.
- * It validates the feature name, persists it as the last attempted feature,
- * checks if the feature is already installed, and determines the next action
- * (run post-install steps or monitor installation).
+ * This use case manages the initial steps of loading a feature.
+ * It validates the feature name, records it as the last attempted feature, checks if the feature is already installed,
+ *and determines the subsequent action (proceed to post-install steps or monitor installation).
  */
 class DFLoadFeatureUseCase @Inject constructor(
     private val installer: DFFeatureInstaller,
@@ -78,9 +77,12 @@ class DFLoadFeatureUseCase @Inject constructor(
 
         // Step 3: Check Installation Status
         return try {
-            Log.d(TAG,"Feature '$feature' installer.isComponentInstalled(feature) going to be called ")
+            Log.d(
+                TAG,
+                "Feature '$feature' installer.isComponentInstalled(feature) going to be called "
+            )
             val isInstalled = installer.isFeatureInstalled(feature)
-            Log.d(TAG,"Feature '$feature' installed status: $isInstalled")
+            Log.d(TAG, "Feature '$feature' installed status: $isInstalled")
             if (isInstalled) {
                 DFLoadFeatureResult.ProceedToPostInstall
             } else {

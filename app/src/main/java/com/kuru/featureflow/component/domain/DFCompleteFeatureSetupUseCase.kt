@@ -7,12 +7,7 @@ import com.kuru.featureflow.component.state.FeatureSetupStep
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
-/**
- * Use case responsible for executing the sequence of post-installation steps
- * required for a dynamic feature module after it's confirmed to be installed.
- * This includes ServiceLoader initialization, running post-install interceptors,
- * and fetching the dynamic screen Composable.
- */
+
 class DFCompleteFeatureSetupUseCase @Inject constructor(
     private val serviceLoader: DFInitializeFeatureUseCase,
     private val interceptors: DFHandleFeatureInterceptorsUseCase,

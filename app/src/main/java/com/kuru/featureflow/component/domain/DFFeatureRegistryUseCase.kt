@@ -9,9 +9,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Use case for managing the registration and retrieval of dynamic feature configurations
- * and their associated UI screens in an Android application. Acts as a central hub for
- * dynamic feature modules, storing configurations and screens in a thread-safe manner.
+ * This singleton use case manages the registration and retrieval of dynamic feature configurations (DFFeatureConfig)
+ * and their associated UI screens (Composable functions). It acts as a central repository for dynamic feature modules.
  */
 @Singleton
 class DFFeatureRegistryUseCase @Inject constructor() {

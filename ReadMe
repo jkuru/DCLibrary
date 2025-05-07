@@ -1,174 +1,111 @@
-# FeatureFlow: Dynamic Feature Module Framework
+## FeatureFlow: Dynamic Feature Management Architecture
 
-## Overview
+This document outlines the architecture of the FeatureFlow component, a framework designed to manage dynamic feature modules within an Android application. It facilitates the loading, installation, and display of features on demand, leveraging Google Play Core's SplitInstall API.
 
-FeatureFlow is an Android framework designed to simplify the management, installation, and loading of Dynamic Feature Modules (DFMs) using the Play Core Install API.
-It provides a structured approach based on Clean Architecture principles (UI, Domain, Data layers)
-and leverages modern Android development practices like Jetpack Compose, Coroutines Flow, Hilt, and DataStore.
+### High-Level Overview
 
-The framework handles:
-* URI-based routing to trigger feature loading.
-* Checking installation status.
-* Initiating and monitoring DFM installation via Play Core.
-* Handling user confirmation dialogs for large downloads.
-* Running pre/post-installation steps (interceptors).
-* Initializing feature modules via ServiceLoader after installation.
-* Dynamically loading and displaying the feature's Compose UI.
-* Managing UI states (Loading, Error, Success, Confirmation Needed).
-* Handling errors gracefully with retry mechanisms.
+FeatureFlow is structured into several key layers: UI, Domain, State Management, Registration, and Dependency Injection. These layers work in concert to provide a robust and maintainable solution for dynamic feature delivery. The primary goal is to allow different parts of the application to be downloaded and installed only when needed, reducing initial app size and improving resource utilization.
 
-## Core Concepts
+The typical flow involves:
+1.  A request (often via a URI) to load a specific feature.
+2.  The URI is resolved to determine the feature name and any associated parameters.
+3.  The framework checks if the feature is already installed.
+4.  If not installed, it initiates the download and installation process, providing feedback to the user (e.g., progress, confirmation requests for large downloads).
+5.  Interceptors can be configured to run pre- and post-installation tasks.
+6.  Once installed, the feature's UI (typically a Composable screen) is loaded and displayed.
+7.  State changes (loading, error, success, confirmation) are managed and communicated to the UI throughout this process.
 
-* **Dynamic Feature Module (DFM):** A part of the app that can be downloaded and installed on demand.
-* **URI Routing:** Using URIs (e.g., `chase/df/route/myfeature`) to identify and request specific features.
-* **Interceptors:** Custom tasks (`DFComponentInterceptor`) that can run before (pre-install) or after (post-install) a DFM installation.
-* **Service Loader Initialization:** Using Java's `ServiceLoader` mechanism (`DFComponentEntry`, `DFServiceLoader`) to allow DFMs to self-register components and run initialization code after being installed and loaded into the application's ClassLoader.
-* **Component Registry:** A central registry (`DFComponentRegistry`) where DFMs register their configuration (`DFComponentConfig`) and main Composable screen.
+### Key Architectural Components
 
-## Architecture
+#### 1. UI Layer
 
-The framework follows a layered architecture inspired by Clean Architecture:
+The UI layer is responsible for presenting information to the user and capturing user interactions. It consists of an `Activity`, `ViewModel`, and Composable `Screen` components.
 
-1.  **UI Layer (`featureflow.component.ui`, `featureflow.ui.theme`):**
-    * **`DFComponentActivity`:** The host Activity responsible for receiving Intents (URIs), interacting with the ViewModel, handling Android-specific flows (like the confirmation dialog via `ActivityResultLauncher`), and displaying the appropriate Compose UI.
-    * **`DFComponentViewModel`:** Manages the UI state (`DFComponentState`), processes user intents (`DFComponentIntent`), orchestrates calls to domain Use Cases, handles the lifecycle of feature loading/installation, and exposes state/events to the Activity.
-    * **`DFComponentScreen`:** The default Compose screen displayed by the Activity during loading, error, or confirmation states.
-    * **`DFComponentState`:** Sealed class representing the various states the UI can be in (Loading, Error, RequiresConfirmation, Success).
-    * **`DFComponentIntent`:** Sealed class representing actions/events from the UI that the ViewModel needs to process.
-    * **`ConfirmationEventData`:** Data class for events triggering the confirmation dialog in the Activity.
+* **`DFComponentActivity`**: This is the entry point Activity for hosting dynamic features. It handles incoming intents (e.g., deep links via `ACTION_VIEW` or custom intents) to trigger feature loading. It observes the `DFComponentViewModel` for UI state changes and one-time events like showing Play Core's user confirmation dialog for feature installation. The activity is also responsible for launching the confirmation dialog using an `ActivityResultLauncher` and communicating the result back to the ViewModel. It uses Jetpack Compose for rendering its UI and will display either the `DFComponentScreen` (for loading/error states) or the dynamically loaded feature's Composable content. `DisposableEffect` is used to clear the dynamic content from the ViewModel when the feature's UI is no longer visible.
+* **`DFComponentViewModel`**: This ViewModel orchestrates the logic for loading and displaying dynamic features. It manages the UI state (`DFComponentState`), handles user intents (`DFComponentIntent` such as `LoadFeature`, `Retry`, `UserConfirmationResult`, `ProcessUri`), and interacts with various domain use cases. It uses `StateFlow` to expose the UI state and a dynamic Composable screen lambda to the `DFComponentActivity`. It also uses a `SharedFlow` to emit one-time events like triggering a user confirmation dialog. The ViewModel keeps track of the current feature being processed, its parameters, and any active installation jobs. It handles duplicate URI processing and cancellation of previous feature loading jobs if a new one is initiated for a different feature.
+* **`DFComponentScreen`**: A Composable function that renders the UI based on the `DFComponentState` from the `DFComponentViewModel`. It displays loading indicators, error messages with retry options, and prompts for user confirmation. This screen acts as a placeholder until the actual dynamic feature's UI is loaded and ready.
+* **UI State (`DFComponentState`)**: A sealed class representing different UI states like `Loading`, `Error`, `RequiresConfirmation`, and `Success`.
+* **User Intents (`DFComponentIntent`)**: A sealed class representing user actions that the ViewModel needs to process, such as `LoadFeature`, `Retry`, `UserConfirmationResult`, and `ProcessUri`.
+* **Theme (`FeatureFlowTheme`, `Color`, `Type`)**: Standard Jetpack Compose theming files defining the color palette, typography, and overall theme for the FeatureFlow components.
 
-2.  **Domain Layer (`featureflow.component.domain`):**
-    * Contains Use Cases encapsulating specific business logic related to feature loading and installation.
-    * **`DFProcessUriUseCase`:** Parses a URI string into a structured route or identifies it as invalid.
-    * **`DFLoadFeatureUseCase`:** Performs initial checks (validation, install status) when a feature load is requested and determines the next step (monitor install or run post-install steps).
-    * **`DFMonitorInstallationUseCase`:** Monitors the installation progress via the `DFComponentInstaller`, maps installation states to UI states (using `DFHandleInstallationStateUseCase`), and emits events (`DFInstallationMonitoringEvent`) to the ViewModel to coordinate UI updates, confirmation dialogs, and triggering post-install steps.
-    * **`DFRunPostInstallStepsUseCase`:** Executes the sequence of post-installation actions (ServiceLoader init, post-install interceptors, fetching the dynamic screen).
-    * **`DFHandleInstallationStateUseCase`:** Maps detailed internal `DFInstallationState` to user-facing `DFComponentState`.
-    * **`DFHandleErrorUseCase`:** Centralizes error processing logic, determining UI error state and potential persistent state updates.
+#### 2. Domain Layer
 
-3.  **Data / Infrastructure Layer (`featureflow.component.*` subpackages):**
-    * Handles interactions with external dependencies and data sources.
-    * **`googleplay` (`DFComponentInstaller`, `DFComponentInstallerManager`):** Abstracts interaction with the Play Core `SplitInstallManager` for checking status, installing modules, and monitoring progress. Maps Play Core states to internal `DFInstallationState`.
-    * **`state` (`DFComponentStateStore`, `DFComponentStateStoreImpl`, `DFInstallationState`, etc.):** Manages application state related to features. Uses DataStore for persisting the last attempted feature URI and Kotlin Flows (`StateFlow`) for managing in-memory installation/interceptor states.
-    * **`register` (`DFComponentRegistry`, `DFComponentRegistryManager`, `DFComponentEntry`, etc.):** Handles the registration of DFMs. Feature modules implement `DFComponentEntry` to register their `DFComponentConfig` and Composable screen lambda with the `DFComponentRegistry` singleton.
-    * **`interceptor` (`DFInterceptor`, `DFInterceptorManager`):** Manages the execution of pre/post-install interceptor tasks defined in `DFComponentConfig`.
-    * **`serviceloader` (`DFServiceLoader`, `DFServiceLoaderManager`):** Manages running `ServiceLoader` to find and initialize `DFComponentEntry` implementations from newly installed DFMs.
-    * **`route` (`DFComponentUriRouteParser`, `DFComponentRoute`):** Utility for parsing URI strings into structured route objects.
-    * **`di` (`AppModule`):** Provides dependencies using Hilt (SplitInstallManager, StateStore, Use Cases, Managers, etc.).
+The domain layer encapsulates the core business logic of the FeatureFlow component. It consists of various use cases that orchestrate the different steps involved in feature loading and installation.
 
-## Data Flow & Feature Loading Lifecycle
+* **Use Cases**:
+    * **`DFResolveFeatureRouteUseCase`**: Parses a URI string to extract the feature name, navigation key, and parameters, determining if it's a feature route or a navigation route. It returns a `DFProcessUriState` which can be `FeatureRoute`, `NavigationRoute`, or `InvalidUri`.
+    * **`DFLoadFeatureUseCase`**: Determines the initial state of a requested feature. It checks if the feature is registered, if pre-install interceptors pass, and if the feature is already installed. It returns `DFLoadFeatureResult` which can be `ProceedToPostInstall` (if already installed and interceptors pass), `ProceedToInstallationMonitoring` (if not installed and interceptors pass), or `Failure`.
+    * **`DFInstallFeatureUseCase` (implements `DFFeatureInstaller`)**: Manages the actual installation of a dynamic feature module using the `SplitInstallManager`. It initiates download requests, monitors installation progress via `SplitInstallStateUpdatedListener`, handles various installation states (Pending, Downloading, Installing, Installed, Failed, etc.), and updates the `DFStateStore` accordingly. It also handles user confirmation requests for large downloads.
+    * **`DFTrackFeatureInstallUseCase`**: This use case is responsible for monitoring the Play Core installation progress and events. It collects events from the installation flow and emits `DFInstallationMonitoringState` updates to the ViewModel. It also contains logic for error handling during installation (`handleError`).
+    * **`DFHandleFeatureInterceptorsUseCase`**: Executes registered pre-install or post-install interceptors for a feature. It iterates through the relevant `DFFeatureInterceptor` tasks and updates their state in the `DFStateStore`.
+    * **`DFCompleteFeatureSetupUseCase`**: Performs post-installation steps for a feature. This includes initializing components via `ServiceLoader`, running post-install interceptors, and fetching the dynamic screen Composable. It returns a `DFFeatureSetupResult` which is either `Success` (with the Composable screen) or `Failure`.
+    * **`DFFeatureRegistryUseCase`**: Manages the registration of features and their configurations (`DFFeatureConfig`). It provides methods to register features and retrieve their configurations.
+    * **`DFInitializeFeatureUseCase`**: This use case seems to be intended for initializing a feature, potentially involving `SplitCompat.install` and interacting with the `SplitInstallManager`. (The provided code for this use case is minimal).
+* **ServiceLoaderWrapper (`DefaultServiceLoaderWrapper`)**: An abstraction over Android's `ServiceLoader` to load implementations of interfaces from dynamic feature modules.
 
-The typical flow for loading a dynamic feature via a URI:
+#### 3. State Management Layer
 
-1.  **Intent Reception:** `DFComponentActivity` receives an Intent (e.g., from a deep link `Intent.ACTION_VIEW` or internal navigation) containing a target URI.
-2.  **URI Handling:** The Activity's `handleIntent` extracts the URI string.
-3.  **Intent Dispatch (UI -> VM):** The Activity sends a `DFComponentIntent.ProcessUri` intent to the `DFComponentViewModel`.
-4.  **URI Processing (VM):** The ViewModel uses `DFProcessUriUseCase` to parse the URI.
-5.  **Feature Load Request (VM):** If the URI maps to a feature route, the ViewModel dispatches a `DFComponentIntent.LoadFeature` intent to itself.
-6.  **Initial Load Check (VM -> Domain):** The ViewModel processes `LoadFeature`, invoking `DFLoadFeatureUseCase`.
-7.  **Load Decision (Domain -> VM):** `DFLoadFeatureUseCase` checks if the feature is installed:
-    * **Installed:** Returns `ProceedToPostInstall`.
-    * **Not Installed:** Returns `ProceedToInstallationMonitoring`.
-    * **Error:** Returns `Failure`.
-8.  **Error Handling (VM):** If `Failure`, the ViewModel uses `DFHandleErrorUseCase` and updates `_uiState` to `DFComponentState.Error`.
-9.  **Installation Path (VM -> Domain):** If `ProceedToInstallationMonitoring`, the ViewModel calls `initiateInstallation`, which invokes `DFMonitorInstallationUseCase`.
-10. **Installation Monitoring (Domain -> Data -> Domain -> VM):**
-    * `DFMonitorInstallationUseCase` calls `DFComponentInstaller.installComponent`.
-    * `DFComponentInstallerManager` interacts with Play Core's `SplitInstallManager`, listens for state updates, and emits `DFInstallProgress` (containing `DFInstallationState` and optional raw Play state).
-    * `DFMonitorInstallationUseCase` collects these updates, uses `DFHandleInstallationStateUseCase` to map `DFInstallationState` to `DFComponentState`, and emits `DFInstallationMonitoringEvent`s to the ViewModel.
-11. **Monitoring Event Handling (VM):** The ViewModel collects events from `DFMonitorInstallationUseCase`:
-    * `UpdateUiState`: Updates `_uiState` (e.g., Loading, Downloading, Installing).
-    * `StorePendingConfirmation`: Stores `ConfirmationEventData` internally and emits it via `_eventFlow`.
-    * `ClearPendingConfirmation`: Clears the internal `pendingConfirmationData`.
-    * `TriggerPostInstallSteps`: Calls `executePostInstallSteps`.
-    * `InstallationFailedTerminal`/`InstallationCancelledTerminal`: Updates state via `handleErrorState`, clears internal data.
-12. **Confirmation Flow (VM -> UI -> VM):**
-    * The Activity collects `ConfirmationEventData` from `_eventFlow`.
-    * It launches the Play Core confirmation dialog using the provided `IntentSender`.
-    * When the dialog finishes, the Activity's `ActivityResultLauncher` callback is triggered.
-    * The Activity sends a `DFComponentIntent.UserConfirmationResult` back to the ViewModel.
-    * The ViewModel's `handleUserConfirmationResult` updates state or logs the outcome (actual installation progress continues via the Play Core listener).
-13. **Post-Install Path (VM -> Domain):** If `ProceedToPostInstall` (from step 7) or triggered by `TriggerPostInstallSteps` (from step 11), the ViewModel calls `executePostInstallSteps`, invoking `DFRunPostInstallStepsUseCase`.
-14. **Post-Install Execution (Domain -> Data -> Domain -> VM):**
-    * `DFRunPostInstallStepsUseCase` calls `DFServiceLoader.runServiceLoaderInitialization` (which finds and runs `DFComponentEntry.initialize` in the DFM).
-    * It then calls `DFInterceptor.runPostInstallInterceptors`.
-    * Finally, it calls `DFInterceptor.fetchAndSetDynamicScreen` to get the Composable lambda registered by the DFM via the `DFComponentRegistry`.
-    * Returns `DFRunPostInstallResult.Success` (with the lambda) or `Failure`.
-15. **Success/Failure Handling (VM):**
-    * **Success:** ViewModel updates `_dynamicScreenContent` with the lambda and sets `_uiState` to `DFComponentState.Success`.
-    * **Failure:** ViewModel uses `handleErrorState` to update `_uiState` to `DFComponentState.Error`.
-16. **UI Rendering (UI):** `DFComponentActivity` observes `_uiState` and `_dynamicScreenContent`.
-    * If `_uiState` is `Success` and `_dynamicScreenContent` is populated, it renders the dynamic feature's UI lambda.
-    * Otherwise, it renders `DFComponentScreen`, which displays content based on the current `_uiState` (Loading, Error, etc.).
+This layer is responsible for managing and persisting the state related to dynamic features.
 
-## State Management (`DFComponentState`)
+* **`DFStateStore` (implemented by `DFStateStoreImpl`)**: Manages both persistent and in-memory state.
+    * **Persistent State**: Uses Jetpack DataStore to persist the `last_attempted_feature_uri`. This allows the app to remember which feature was being installed if the app closes mid-download, enabling resumption or retry.
+    * **In-Memory State**: Uses `MutableStateFlow` to hold the current installation state (`DFInstallationState`) for each observed feature and the state of interceptors (`DFFeatureInterceptorState`). It provides `StateFlow` instances for UI components to observe these states in real-time.
+* **State Models**:
+    * **`DFInstallationState`**: A sealed class representing the various installation states of a dynamic feature (e.g., `NotInstalled`, `Pending`, `Downloading`, `Installing`, `Installed`, `Failed`, `RequiresConfirmation`). It also includes `DFErrorCode` to map Play Core error codes.
+    * **`DFFeatureRoute`**: Represents a parsed route from a URI, containing the path, route name, navigation key, parameters, and parsing status.
+    * **`DFFeatureInstallProgress`**: Combines the framework's `DFInstallationState` with Play Core's `SplitInstallSessionState`, especially useful when user confirmation is needed.
+    * **`DFFeatureInterceptorState`**: A sealed class representing the states of an interceptor (`Active`, `Inactive`, `Completed`, `Failed`).
+    * **`DFFeatureError`**: Encapsulates error information, including the UI error state (`DFComponentState.Error`) and an optional installation state to store.
+    * **`DFInstallationMonitoringState`**: Represents events emitted during installation monitoring to signal actions like UI updates, storing pending confirmations, triggering post-install steps, or terminal failures/cancellations.
+    * **`DFFeatureSetupResult`**: Represents the outcome of post-installation steps, either `Success` with the feature's screen Composable or `Failure` indicating the step and reason.
 
-* **Purpose:** Represents the high-level state of the feature loading/installation process visible to the user. It drives the UI displayed in `DFComponentActivity` and `DFComponentScreen`.
-* **States:**
-    * `Loading`: Initial state, or when installation/downloading is in progress.
-    * `RequiresConfirmation`: Play Core needs user permission to proceed (e.g., large download). The Activity listens for events to show the system dialog.
-    * `Error`: An error occurred (validation, network, installation, etc.). Contains details about the error.
-    * `Success`: The feature is installed, and post-install steps (including fetching the UI lambda) are complete. The Activity uses this state in conjunction with `dynamicScreenContent` to show the feature.
-* **Management:** The `DFComponentViewModel` manages the `_uiState: MutableStateFlow<DFComponentState>`. This state is updated based on results from Use Cases (`DFLoadFeatureUseCase`, `DFRunPostInstallStepsUseCase`) and events from `DFMonitorInstallationUseCase`. The `DFHandleInstallationStateUseCase` plays a key role in translating lower-level `DFInstallationState` into the appropriate `DFComponentState`.
-* **Observation:** The `DFComponentActivity` and `DFComponentScreen` observe the `uiState` using `collectAsStateWithLifecycle` to reactively update the UI.
+#### 4. Registration Layer
 
-## Intent Handling (`DFComponentIntent`)
+This layer handles the configuration and registration of dynamic features.
 
-* **Purpose:** Represents actions initiated by the user or the system (like receiving an Activity Intent) that require processing by the `DFComponentViewModel`. This follows the MVI (Model-View-Intent) pattern principle where the UI sends intents to the ViewModel to trigger logic.
-* **Intents:**
-    * `ProcessUri(uri)`: Sent by the Activity when it receives an Intent containing a URI. Triggers URI parsing.
-    * `LoadFeature(feature, params)`: Typically sent internally by the ViewModel after `ProcessUri` succeeds, or could be triggered directly. Initiates the core feature loading flow.
-    * `Retry`: Sent by the UI (e.g., `DFComponentScreen`'s retry button) when an error occurs. Triggers `retryLastFeature`.
-    * `UserConfirmationResult(feature, confirmed)`: Sent by the Activity after the user responds to the Play Core confirmation dialog.
-* **Processing:** The ViewModel's `processIntent` function acts as the central dispatcher, routing each intent type to a dedicated private handler function (`handleProcessUriIntent`, `loadFeature`, `retryLastFeature`, `handleUserConfirmationResult`). These handlers contain the logic to interact with Use Cases and update state.
+* **`DFFeatureConfig`**: A data class holding the configuration for a dynamic feature, including its name and a list of `DFFeatureInterceptor` instances.
+* **`DFFeatureInterceptor`**: Represents an interceptor task to be executed either before (preInstall = true) or after (preInstall = false) the installation of a feature. The task is a lambda function returning a Boolean for success/failure.
+* **`DFRegistryInterfaces` (`DFFeatureRegistrar`, `DFFeatureProvider`)**:
+    * `DFFeatureRegistrar`: An interface likely used by modules to register their features with the core framework.
+    * `DFFeatureProvider`: An interface that dynamic feature modules can implement to provide their main Composable screen. This is typically discovered using `ServiceLoader`.
 
-## How to Use (For Feature Teams)
+#### 5. Dependency Injection (DI) Layer
 
-1.  **Create DFM:** Set up your dynamic feature module in the project.
-2.  **Implement `DFComponentEntry`:** Create a class in your DFM that implements `com.kuru.featureflow.component.register.DFComponentEntry`.
-    ```kotlin
-    // In your DFM (e.g., :feature_myfeature)
-    import com.kuru.featureflow.component.register.*
-    import dagger.hilt.android.EntryPointAccessors
-    import javax.inject.Inject // If needed within your entry
+Dependency injection is managed by Hilt.
 
-    class MyFeatureEntry : DFComponentEntry {
-        override fun initialize(context: Context) {
-            // 1. Get the Hilt EntryPoint to access the Registry
-            val entryPoint = EntryPointAccessors.fromApplication(
-                context.applicationContext,
-                DFRegistryEntryPoint::class.java
-            )
-            val registry = entryPoint.getComponentRegistry()
+* **`AppModule`**: Provides singleton instances of `SplitInstallManager`, Jetpack DataStore (`Preferences`), a global `CoroutineScope`, and `ServiceLoaderWrapper`.
+* **`FrameworkBindingsModule`**: Binds interfaces like `DFFeatureInstaller` and `DFStateStore` to their concrete implementations (`DFInstallFeatureUseCase` and `DFStateStoreImpl` respectively).
+* ViewModels (e.g., `DFComponentViewModel`) and other classes are annotated with `@HiltViewModel` or `@Inject` for Hilt to manage their dependencies.
 
-            // 2. Define your feature's configuration
-            val config = DFComponentConfig(
-                route = "myfeature", // Unique route/module name
-                listOfDFComponentInterceptor = listOf(
-                    // Add pre/post install interceptors if needed
-                    // DFComponentInterceptor(preInstall = false) { /* task */ true }
-                )
-            )
+### Interactions and Flow
 
-            // 3. Register your feature's config and main screen Composable
-            registry.register(config) { navController, params ->
-                // Your main Composable screen for this feature
-                MyFeatureScreen(navController = navController, params = params)
-            }
-        }
-    }
-    ```
-3.  **Declare Service:** Declare your `DFComponentEntry` implementation in the DFM's `src/main/resources/META-INF/services/com.kuru.featureflow.component.register.DFComponentEntry` file (create this path if it doesn't exist). The file should contain the fully qualified name of your implementation class:
-    ```
-    com.yourpackage.feature_myfeature.MyFeatureEntry
-    ```
-4.  **Build:** Ensure your DFM is correctly configured in your app's build files.
+1.  **Initiation**: The process typically starts when `DFComponentActivity` receives an Intent (e.g., from a deep link). It extracts the URI and sends a `ProcessUri` intent to `DFComponentViewModel`.
+2.  **URI Processing**: `DFComponentViewModel` uses `DFResolveFeatureRouteUseCase` to parse the URI. If successful, it dispatches a `LoadFeature` intent with the feature name and parameters.
+3.  **Feature Loading**:
+    * The ViewModel calls `DFLoadFeatureUseCase`.
+    * `DFLoadFeatureUseCase` checks with `DFFeatureRegistryUseCase` for feature registration and runs pre-install interceptors via `DFHandleFeatureInterceptorsUseCase`.
+    * If the feature is already installed and pre-install interceptors pass, `DFLoadFeatureUseCase` signals to proceed to post-install steps.
+    * If not installed and interceptors pass, it signals to proceed with installation monitoring.
+    * Errors at this stage (e.g., unregistered feature, failed interceptor) result in an error state.
+4.  **Installation (if needed)**:
+    * `DFComponentViewModel` initiates installation by calling `DFTrackFeatureInstallUseCase`.
+    * `DFTrackFeatureInstallUseCase` internally uses `DFInstallFeatureUseCase` (which implements `DFFeatureInstaller`) to interact with `SplitInstallManager`.
+    * `DFInstallFeatureUseCase` requests the module, listens for state updates, and updates `DFStateStore` with `DFInstallationState`.
+    * If user confirmation is required (e.g., large download), `DFInstallFeatureUseCase` updates the state. `DFTrackFeatureInstallUseCase` emits a `StorePendingConfirmation` event.
+    * `DFComponentViewModel` receives this event, stores `ConfirmationEventData`, and emits an event via `eventFlow` to `DFComponentActivity`.
+    * `DFComponentActivity` launches the confirmation dialog. The result is sent back to the ViewModel as a `UserConfirmationResult` intent.
+5.  **Post-Installation Steps**:
+    * Once `DFTrackFeatureInstallUseCase` signals successful installation (`TriggerPostInstallSteps`), `DFComponentViewModel` calls `DFCompleteFeatureSetupUseCase`.
+    * `DFCompleteFeatureSetupUseCase` uses `ServiceLoaderWrapper` to find a `DFFeatureProvider` implementation from the newly installed module. It also runs post-install interceptors via `DFHandleFeatureInterceptorsUseCase`.
+    * If successful, it returns the feature's main Composable screen lambda.
+6.  **UI Update**:
+    * `DFComponentViewModel` updates its `_dynamicScreenContent` StateFlow with the Composable lambda and sets the `_uiState` to `Success`.
+    * `DFComponentActivity` observes these changes and renders the dynamic feature's UI.
+7.  **Error Handling**: Throughout the process, errors are mapped to `DFComponentState.Error` by `DFTrackFeatureInstallUseCase`'s `handleError` method (which produces a `DFFeatureError`) and propagated to the UI by the ViewModel. The UI can then display appropriate error messages and retry options.
 
-## Dependencies
+### State Persistence and Recovery
 
-* Play Core Install API (`com.google.android.play:core`)
-* Hilt (`com.google.dagger:hilt-android`)
-* Jetpack Compose (`androidx.compose.ui`, `androidx.compose.material3`, `androidx.lifecycle:lifecycle-runtime-compose`, `androidx.activity:activity-compose`)
-* Coroutines & Flow (`org.jetbrains.kotlinx:kotlinx-coroutines-core`, `org.jetbrains.kotlinx:kotlinx-coroutines-android`)
-* DataStore Preferences (`androidx.datastore:datastore-preferences`)
-* Navigation Compose (`androidx.navigation:navigation-compose`) - For Compose screens within features.
+* The `last_attempted_feature_uri` is persisted in DataStore. If the app is closed during an installation, `DFComponentViewModel` can use this on the next launch (e.g., via a `Retry` intent or initial load logic) to check the status with `SplitInstallManager` and potentially resume or restart the installation.
+* In-memory states like specific installation progress or interceptor states are transient but can be reconstructed or re-evaluated based on `SplitInstallManager`'s persisted progress and the persisted `last_attempted_feature_uri`.
+
+This architecture provides a modular and state-driven approach to managing dynamic features, enhancing the user experience by reducing initial app size and loading features on demand.

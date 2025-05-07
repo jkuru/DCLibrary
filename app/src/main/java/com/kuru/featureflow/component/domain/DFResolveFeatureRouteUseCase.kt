@@ -35,9 +35,9 @@ sealed class DFProcessUriState {
 }
 
 /**
- * Use case responsible for parsing a URI string and determining the intended
- * action based on the framework's routing rules (e.g., loading a feature
- * module or navigating via a key).
+ *  This use case is responsible for parsing a URI string to determine the intended action,
+ *  such as loading a feature module or navigating via a key, based on predefined routing rules.
+ *  It interprets a URI and categorizes it as a feature route, a navigation route, or an invalid URI.
  */
 class DFResolveFeatureRouteUseCase @Inject constructor() {
     companion object {
@@ -91,7 +91,10 @@ class DFResolveFeatureRouteUseCase @Inject constructor() {
             }
             // If status is "success" but neither route nor key is present, treat as invalid structure
             else -> {
-                Log.w(TAG, "URI parsing succeeded but resulted in empty route and navigation key for URI: $uri")
+                Log.w(
+                    TAG,
+                    "URI parsing succeeded but resulted in empty route and navigation key for URI: $uri"
+                )
                 DFProcessUriState.InvalidUri(
                     "Parsed route structure is incomplete (missing route or navigation key)."
                 )
@@ -165,6 +168,7 @@ class DFResolveFeatureRouteUseCase @Inject constructor() {
                     )
                 }
             }
+
             relevantSegments.firstOrNull() == NAVIGATION_SEGMENT && relevantSegments.getOrNull(1) == KEY_SEGMENT && relevantSegments.size > 2 -> {
                 // Navigation Key: /chase/df/navigation/key/{keyName}
                 val keyValue = relevantSegments.getOrNull(2) ?: ""
@@ -180,6 +184,7 @@ class DFResolveFeatureRouteUseCase @Inject constructor() {
                     )
                 }
             }
+
             relevantSegments.isNotEmpty() -> {
                 // Fallback: Treat the first segment after /chase/df/ as the route name
                 val routeValue = relevantSegments.first()
@@ -191,6 +196,7 @@ class DFResolveFeatureRouteUseCase @Inject constructor() {
                     status = STATUS_SUCCESS
                 )
             }
+
             else -> {
                 Log.e(TAG, "URI path structure not recognized after prefix. Path: $path")
                 createFailedRoute("Unrecognized path structure")

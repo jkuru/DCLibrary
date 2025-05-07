@@ -50,8 +50,8 @@ interface DFFeatureInstaller {
 }
 
 /**
- * Use case for installing dynamic feature modules using Google Play's SplitInstall API.
- * Manages installation requests, monitors progress, and handles session states.
+ *  This use case handles the installation of dynamic feature modules using Google Play's SplitInstall API.
+ *  It manages installation requests, monitors progress, and deals with session states.
  */
 @Singleton
 class DFInstallFeatureUseCase @Inject constructor(
@@ -158,7 +158,10 @@ class DFInstallFeatureUseCase @Inject constructor(
                     if (existingListener == null) {
                         Log.d(TAG, "Registering listener for session $currentSessionId")
                         splitInstallManager.registerListener(listener)
-                        Log.d(TAG, "Listener registered for $featureName (session $currentSessionId)")
+                        Log.d(
+                            TAG,
+                            "Listener registered for $featureName (session $currentSessionId)"
+                        )
 
                         // Emit initial state
                         val currentSessionState =
@@ -181,7 +184,12 @@ class DFInstallFeatureUseCase @Inject constructor(
                         val currentSessionState =
                             splitInstallManager.getSessionState(currentSessionId).await()
                         if (currentSessionState != null) {
-                            trySend(mapSessionStateToInstallProgress(currentSessionState, featureName))
+                            trySend(
+                                mapSessionStateToInstallProgress(
+                                    currentSessionState,
+                                    featureName
+                                )
+                            )
                         } else {
                             trySend(DFFeatureInstallProgress(DFInstallationState.Unknown))
                         }
@@ -246,12 +254,14 @@ class DFInstallFeatureUseCase @Inject constructor(
                 }
                 DFInstallationState.Downloading(progress.coerceIn(0, 100))
             }
+
             SplitInstallSessionStatus.DOWNLOADED -> DFInstallationState.Installing(0)
             SplitInstallSessionStatus.INSTALLING -> DFInstallationState.Installing(100)
             SplitInstallSessionStatus.INSTALLED -> DFInstallationState.Installed
             SplitInstallSessionStatus.FAILED -> DFInstallationState.Failed(
                 DFErrorCode.fromSplitInstallErrorCode(state.errorCode())
             )
+
             SplitInstallSessionStatus.CANCELING -> DFInstallationState.Canceling
             SplitInstallSessionStatus.CANCELED -> DFInstallationState.Canceled
             SplitInstallSessionStatus.UNKNOWN -> DFInstallationState.Unknown
@@ -269,6 +279,7 @@ class DFInstallFeatureUseCase @Inject constructor(
             is DFInstallationState.Installed,
             is DFInstallationState.Failed,
             is DFInstallationState.Canceled -> true
+
             else -> false
         }
     }

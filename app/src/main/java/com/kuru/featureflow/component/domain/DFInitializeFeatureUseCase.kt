@@ -38,8 +38,8 @@ class DefaultServiceLoaderWrapper @Inject constructor() : ServiceLoaderWrapper {
 }
 
 /**
- * Use case for initializing dynamic feature modules by loading and executing
- * their DFRegistryComponentEntry implementations via ServiceLoader.
+ * This use case is responsible for initializing dynamic feature modules by loading
+ *  and executing their DFRegistryComponentEntry implementations via ServiceLoader.
  */
 class DFInitializeFeatureUseCase @Inject constructor(
     private val registry: DFFeatureRegistryUseCase,
@@ -85,7 +85,11 @@ class DFInitializeFeatureUseCase @Inject constructor(
                             )
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to initialize DFRegistryComponentEntry ${entry.javaClass.name}", e)
+                        Log.e(
+                            TAG,
+                            "Failed to initialize DFRegistryComponentEntry ${entry.javaClass.name}",
+                            e
+                        )
                         return@withContext false
                     }
                 }
